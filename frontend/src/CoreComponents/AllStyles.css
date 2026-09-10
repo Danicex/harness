@@ -1,0 +1,11 @@
+.side-nav{
+    animation: slidein 0.5s ease forwards;
+}
+@keyframes slidein {
+    0%{
+transform: translateX(-100%);
+    }
+    100%{
+transform: translateX(0);
+    }
+}

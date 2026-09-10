@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input {
+  background: none;
+}
+
+button {
+  border-radius: 8px;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/*
+  Brand colors:
+    primary   #1E88E5  -> hsl(208 79% 51%)
+    secondary #102A43  -> hsl(209 61% 16%)
+
+  These drive --primary / --secondary below in both light and dark mode,
+  so every shadcn component (Button, Badge, focus rings, etc.) automatically
+  uses the brand palette without needing per-component overrides.
+*/
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 209 61% 10%;
+    
+
+    --card: 0 0% 100%;
+    --card-foreground: 209 61% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 209 61% 10%;
+
+    --primary: 246, 55%, 41%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 209 35% 94%;
+    --secondary-foreground: 209 61% 16%;
+
+    --muted: 209 30% 95%;
+    --muted-foreground: 209 15% 40%;
+
+    --accent: 208 79% 95%;
+    --accent-foreground: 209 61% 16%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 209 20% 88%;
+    --input: 209 20% 88%;
+    --ring: 208 79% 51%;
+
+    --chart-1: 208 79% 51%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 209 61% 16%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 209 61% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 209 55% 11%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 209 55% 11%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 246, 55%, 41%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 209 50% 16%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 209 40% 16%;
+    --muted-foreground: 209 15% 65%;
+
+    --accent: 209 45% 20%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 40%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 209 35% 20%;
+    --input: 209 35% 20%;
+    --ring: 208 79% 56%;
+
+    --chart-1: 208 79% 56%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

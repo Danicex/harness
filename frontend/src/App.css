@@ -1,0 +1,90 @@
+body {
+  width: 100%;
+  height: 99dvh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/*
+  Legacy hooks kept for pages built before the theme refactor
+  (Auth/Signup, Auth/Login, Auth/Onboarding, About, Dashboard logo text).
+  They now ride on the same CSS variables as the rest of the app instead
+  of separate body.light / body.dark rules, so they stay in sync with the
+  light / dark / system theme switcher.
+*/
+#text {
+  color: hsl(var(--foreground));
+}
+
+#trans-bg {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+}
+
+.ql-container {
+    min-height: 420px;
+}
+
+.ql-editor {
+    min-height: 380px;
+    font-size: 15px;
+}
+.ql-toolbar {
+    color: inherit;
+}
+
+.ql-toolbar button,
+.ql-toolbar .ql-picker {
+    color: inherit;
+}
+
+.ql-toolbar button svg {
+    stroke: currentColor;
+}
+
+.ql-toolbar .ql-stroke {
+    stroke: currentColor !important;
+}
+
+.ql-toolbar .ql-fill {
+    fill: currentColor !important;
+}
+
+.ql-toolbar .ql-picker-label {
+    color: inherit;
+}
+.ql-toolbar {
+    border-radius: 12px 12px 0 0;
+}
+
+.ql-container {
+    border-radius: 0 0 12px 12px;
+}
+.ql-toolbar {
+    border: 1px solid hsl(var(--border));
+    border-bottom: none;
+}
+
+.ql-container {
+    border: 1px solid hsl(var(--border));
+}
+.ql-container.ql-snow:focus-within,
+.ql-toolbar.ql-snow:focus-within {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+}
+.ql-editor {
+    padding: 18px;
+    line-height: 1.7;
+}
+.ql-toolbar.ql-snow,
+.ql-container.ql-snow {
+    border-color: hsl(var(--border));
+}
+
+.ql-toolbar.ql-snow {
+    background: hsl(var(--background));
+}
+
+.ql-container.ql-snow {
+    background: hsl(var(--background));
+}
