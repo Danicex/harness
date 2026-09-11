@@ -1,45 +1,25 @@
-# CRUD product
+# CRUD room
 from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form, Query
 from typing import Optional
 from datetime import datetime
 from app.database import SessionDep
-from app.model import Product
+from app.model import Room
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
 from app.auth.authentication import isAuthorized
 from app.services.upload import handle_file_upload
-from pydantic import BaseModel
 
-router = APIRouter(prefix="/product")
+router = APIRouter(prefix="/room")
 
-class ProductCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    price: str
-    category: Optional[str] = None
-    quantity: Optional[str] = None
-    image_url: Optional[str] = None
-
-class SaleCreate(BaseModel):
-    product_id: int
-    quantity_sold: int
-
-class SaleRead(BaseModel):
-    id: int
-    product_id: int
-    quantity_sold: int
-    unit_price: str
-    total_amount: str
-    created_at: datetime
-    
-@router.post('/create_product')
-async def create_product(
+@router.post('/create_room')
+async def create_room(
     session: SessionDep,
-    name: str = Form(...),
+    number: str = Form(...),
     price: str = Form(...),
     description: Optional[str] = Form(None),
-    category: Optional[str] = Form(None),
-    quantity: Optional[str] = Form(None),
+    room_type: Optional[str] = Form(None),
+    room_status: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
+    pictures: Optional[list[UploadFile]] = File(None),
     authorization: str = Header(...)
 ):
     token = authorization.split(" ")[1]
@@ -50,43 +30,52 @@ async def create_product(
         raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
-        # Handle file upload
+        # Handle main image upload
         image_url = None
         if image:
             image_url = await handle_file_upload(image)
         
+        # Handle multiple pictures upload
+        # pictures_urls = None
+        # if pictures:
+        #     pictures_urls = {}
+        #     for idx, pic in enumerate(pictures):
+        #         pic_url = handle_file_upload(pic, folder="rooms/pictures")
+        #         pictures_urls[f"picture_{idx + 1}"] = pic_url
+
         # Prepare data for database
-        product_dict = {
+        room_dict = {
             "admin_id": auth.get("admin_id"),
-            "name": name,
+            "number": number,
             "price": price,
+            "room_type": room_type,
             "description": description,
-            "category": category,
-            "quantity": quantity,
+            "status": room_status,
             "image_url": image_url,
+            # "pictures": pictures_urls,
             "created_at": datetime.utcnow()
         }
         
-        success, product = create_data("product", product_dict, session)
+        success, room = create_data("room", room_dict, session)
         
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create product"
+                detail="Failed to create room"
             )
         
-        return {"message": "Product created successfully", "product": product}
+        return {"message": "Room created successfully", "room": room}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating product: {str(e)}"
+            detail=f"Error creating room: {str(e)}"
         )
 
 
-@router.get("/get_products")
-def read_products(
+@router.get("/get_rooms")
+def read_rooms(
     session: SessionDep,
     admin_id: Optional[int] = Query(None),
     authorization: Optional[str] = Header(None)
@@ -102,28 +91,29 @@ def read_products(
 
     if not resolved_admin_id:
         raise HTTPException(status_code=400, detail="admin_id is required")
-    
+
    
     try:
-        products = get_admin_data(resolved_admin_id, "product", session)
+            
+        rooms = get_admin_data(resolved_admin_id, "room", session)
+
+        if not rooms:
+            return {"message": "No rooms found", "rooms": []}
         
-        if not products:
-            return {"message": "No products found", "products": []}
-        
-        return products
+        return rooms
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving products: {str(e)}"
+            detail=f"Error retrieving rooms: {str(e)}"
         )
 
 
-@router.get("/{product_id}")
-def get_single_product(
+@router.get("/{room_id}")
+def get_single_room(
     session: SessionDep,
-    product_id: int,
+    room_id: int,
     authorization: str = Header(...)
 ):
     token = authorization.split(" ")[1]
@@ -134,34 +124,35 @@ def get_single_product(
         raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
-        product = get_single_data(product_id, "product", session)
+        room = get_single_data(room_id, "room", session)
         
-        if not product:
+        if not room:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
+                detail="Room not found"
             )
         
-        return {"message": "Product retrieved successfully", "product": product}
+        return {"message": "Room retrieved successfully", "room": room}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving product: {str(e)}"
+            detail=f"Error retrieving room: {str(e)}"
         )
 
 
-@router.put('/update_product/{product_id}')
-async def update_product(
+@router.put('/update_room/{room_id}')
+async def update_room(
     session: SessionDep,
-    product_id: int,
-    name: Optional[str] = Form(None),
+    room_id: int,
+    number: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
-    category: Optional[str] = Form(None),
-    quantity: Optional[str] = Form(None),
+    room_status: Optional[str] = Form(None),
+    room_type: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
+    pictures: Optional[list[UploadFile]] = File(None),
     authorization: str = Header(...)
 ):
     token = authorization.split(" ")[1]
@@ -172,64 +163,72 @@ async def update_product(
         raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
-        # Get existing product
-        existing_product = get_single_data(product_id, "product", session)
-        if not existing_product:
+        # Get existing room
+        existing_room = get_single_data(room_id, "room", session)
+        if not existing_room:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
+                detail="Room not found"
             )
         
-        # Verify admin owns this product
-        if existing_product.admin_id != auth.get("admin_id"):
+        # Verify admin owns this room
+        if existing_room.admin_id != auth.get("admin_id"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to update this product"
+                detail="Not authorized to update this room"
             )
         
         # Prepare update dict (only include fields that are provided)
-        product_dict = {}
+        room_dict = {}
         
-        if name is not None:
-            product_dict["name"] = name
+        if number is not None:
+            room_dict["number"] = number
         if price is not None:
-            product_dict["price"] = price
+            room_dict["price"] = price
         if description is not None:
-            product_dict["description"] = description
-        if category is not None:
-            product_dict["category"] = category
-        if quantity is not None:
-            product_dict["quantity"] = quantity
+            room_dict["description"] = description
+        if room_status is not None:
+            room_dict["status"] = room_status
+        if room_type is not None:
+            room_dict["room_type"] = room_type
         
-        # Handle file upload if new file provided
+        # Handle main image upload if new file provided
         if image:
             image_url = await handle_file_upload(image)
-            product_dict["image_url"] = image_url
+            room_dict["image_url"] = image_url
         
-        # Update product using CRUD function
-        success, updated_product = update_data("product", product_id, product_dict, session)
+        # Handle multiple pictures upload if new files provided
+        # if pictures:
+        #     pictures_urls = {}
+        #     for idx, pic in enumerate(pictures):
+        #         pic_url = handle_file_upload(pic, folder="rooms/pictures")
+        #         pictures_urls[f"picture_{idx + 1}"] = pic_url
+        #     room_dict["pictures"] = pictures_urls
+        
+        # Update room using CRUD function
+        success, updated_room = update_data("room", room_id, room_dict, session)
         
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to update product"
+                detail="Failed to update room"
             )
         
-        return {"message": "Product updated successfully", "product": updated_product}
+        return {"message": "Room updated successfully", "room": updated_room}
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating product: {str(e)}"
+            detail=f"Error updating room: {str(e)}"
         )
 
 
-@router.delete('/delete_product/{product_id}')
-def delete_product(
+@router.delete('/delete_room/{room_id}')
+def delete_room(
     session: SessionDep,
-    product_id: int,
+    room_id: int,
     authorization: str = Header(...)
 ):
     token = authorization.split(" ")[1]
@@ -240,36 +239,36 @@ def delete_product(
         raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
-        # Get existing product
-        existing_product = get_single_data(product_id, "product", session)
-        if not existing_product:
+        # Get existing room
+        existing_room = get_single_data(room_id, "room", session)
+        if not existing_room:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
+                detail="Room not found"
             )
         
-        # Verify admin owns this product
-        if existing_product.admin_id != auth.get("admin_id"):
+        # Verify admin owns this room
+        if existing_room.admin_id != auth.get("admin_id"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this product"
+                detail="Not authorized to delete this room"
             )
         
-        # Delete product using CRUD function
-        success = delete_data("product", product_id, session)
+        # Delete room using CRUD function
+        success = delete_data("room", room_id, session)
         
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete product"
+                detail="Failed to delete room"
             )
         
-        return {"message": "Product deleted successfully"}
+        return {"message": "Room deleted successfully"}
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting product: {str(e)}"
+            detail=f"Error deleting room: {str(e)}"
         )

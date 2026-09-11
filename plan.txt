@@ -1,4 +1,5 @@
 ----------------------- goal ---------------------
+- re contruct auth
 - inventory deduction
 api: crud product / create sales that update product quantity
 
@@ -26,8 +27,3 @@ a regular chatbot trained on the hotel data (this data is fetched from db unique
 ---------------------------------------------------
 
 
-git add .
-git commit -m "first commit"
-git branch -M master
-git remote add origin git@github.com:Danicex/harness.git
-git push -u origin master

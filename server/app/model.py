@@ -2,6 +2,8 @@ from sqlmodel import SQLModel, Field, Relationship, JSON, Column
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from sqlalchemy.dialects.postgresql import JSONB
+from decimal import Decimal, InvalidOperation
+
 
 class Admin(SQLModel, table=True):
     __tablename__ = "admin"
@@ -30,6 +32,7 @@ class Admin(SQLModel, table=True):
     datasets: List["Dataset"] = Relationship(back_populates="admin")
     call_logs: List["CallLog"] = Relationship(back_populates="admin")
 
+
 class Product(SQLModel, table=True):
     __tablename__ = "products"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -40,10 +43,25 @@ class Product(SQLModel, table=True):
     category: Optional[str] = None
     quantity: Optional[str] = None
     image_url: Optional[str] = None
+    status: str = Field(default="available")  # "available" | "out_of_stock"
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationship back to admin
-    admin: Optional[Admin] = Relationship(back_populates="products")
+    admin: Optional["Admin"] = Relationship(back_populates="products")
+    sales: List["Sales"] = Relationship(back_populates="product")
+
+
+class Sales(SQLModel, table=True):
+    __tablename__ = "sales"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="products.id")
+    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id")
+    quantity_sold: int
+    unit_price: str      # snapshot of product.price at time of sale
+    total_amount: str    # unit_price * quantity_sold
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    product: Optional[Product] = Relationship(back_populates="sales")
+    admin: Optional["Admin"] = Relationship(back_populates="sales")
     
 class Room(SQLModel, table=True):
     __tablename__ = "rooms"
@@ -93,22 +111,6 @@ class Staff(SQLModel, table=True):
     admin: Optional[Admin] = Relationship(back_populates="staff")
     
 
-    
-class Sales(SQLModel, table=True):
-    __tablename__ = "sales"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id")
-    staff_id: Optional[int] = None
-    customer_name: Optional[str] = None
-    payment_method: Optional[str] = None
-    total_amount: float = Field(default=0.0)
-    products_data: Optional[List[Dict[str, Any]]] = Field(default=None, sa_type=JSON)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    
-    # Relationships
-    admin: Optional["Admin"] = Relationship(back_populates="sales")
     
 class Booking(SQLModel, table=True):
     __tablename__ = "bookings"
