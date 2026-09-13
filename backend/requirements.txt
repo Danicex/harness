@@ -2,12 +2,15 @@ fastapi[standard]
 uvicorn[standard]==0.30.0
 sqlalchemy==2.0.35
 pydantic==2.9.0
+pydantic[email]
 sqlmodel>=0.0.22
-dotenv
+python-dotenv
 redis
 psycopg2-binary
 passlib[bcrypt]
 python-jose[cryptography]
 bcrypt<4.1.0
 resend
-
+httpx
+celery
+openai

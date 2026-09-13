@@ -1,275 +1,79 @@
-# CRUD product
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form, Query
-from typing import Optional
+# Inventory: products
+from typing import Optional, List
 from datetime import datetime
-from app.database import SessionDep
-from app.model import Product
-from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
-from app.services.upload import handle_file_upload
-from pydantic import BaseModel
 
-router = APIRouter(prefix="/product")
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field as PField
+from sqlmodel import Session, select
+
+from app.database import get_session
+from app.model import Product, ProductStatus, Role
+from app.auth.authentication import CurrentUser, require_role, scope_to_company
+
+router = APIRouter(prefix="/product", tags=["inventory"])
+
 
 class ProductCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    price: str
+    price: float = PField(gt=0)
     category: Optional[str] = None
-    quantity: Optional[str] = None
+    quantity: int = PField(default=0, ge=0)
     image_url: Optional[str] = None
 
-class SaleCreate(BaseModel):
-    product_id: int
-    quantity_sold: int
 
-class SaleRead(BaseModel):
-    id: int
-    product_id: int
-    quantity_sold: int
-    unit_price: str
-    total_amount: str
+class ProductRead(BaseModel):
+    id: str
+    company_id: str
+    name: str
+    description: Optional[str]
+    price: float
+    category: Optional[str]
+    quantity: int
+    image_url: Optional[str]
+    status: ProductStatus
     created_at: datetime
-    
-@router.post('/create_product')
-async def create_product(
-    session: SessionDep,
-    name: str = Form(...),
-    price: str = Form(...),
-    description: Optional[str] = Form(None),
-    category: Optional[str] = Form(None),
-    quantity: Optional[str] = Form(None),
-    image: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    updated_at: datetime
+
+
+def _status_for(quantity: int) -> ProductStatus:
+    return ProductStatus.AVAILABLE if quantity > 0 else ProductStatus.OUT_OF_STOCK
+
+
+# Company owners and staff can both stock/manage inventory.
+@router.post("/", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
+def create_product(
+    payload: ProductCreate,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY, Role.STAFF)),
+    session: Session = Depends(get_session),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    
-    try:
-        # Handle file upload
-        image_url = None
-        if image:
-            image_url = await handle_file_upload(image)
-        
-        # Prepare data for database
-        product_dict = {
-            "admin_id": auth.get("admin_id"),
-            "name": name,
-            "price": price,
-            "description": description,
-            "category": category,
-            "quantity": quantity,
-            "image_url": image_url,
-            "created_at": datetime.utcnow()
-        }
-        
-        success, product = create_data("product", product_dict, session)
-        
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create product"
-            )
-        
-        return {"message": "Product created successfully", "product": product}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating product: {str(e)}"
-        )
+    product = Product(
+        company_id=company_id,
+        name=payload.name,
+        description=payload.description,
+        price=payload.price,
+        category=payload.category,
+        quantity=payload.quantity,
+        image_url=payload.image_url,
+        status=_status_for(payload.quantity),
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return product
 
 
-@router.get("/get_products")
-def read_products(
-    session: SessionDep,
-    admin_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None)
+# Convenience read endpoint — sales/campaigns/the AI receptionist all need a
+# way to look products up, so this ships alongside create rather than as a
+# separate CRUD surface.
+@router.get("/", response_model=List[ProductRead])
+def list_products(
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY, Role.STAFF, Role.ADMIN)),
+    session: Session = Depends(get_session),
 ):
-    resolved_admin_id = admin_id
-
-    if authorization:
-        token = authorization.split(" ")[1]
-        auth = isAuthorized(token)
-        if not auth:
-            raise HTTPException(status_code=401, detail="Not authorized")
-        resolved_admin_id = auth["admin_id"]  # token wins over query param
-
-    if not resolved_admin_id:
-        raise HTTPException(status_code=400, detail="admin_id is required")
-    
-   
-    try:
-        products = get_admin_data(resolved_admin_id, "product", session)
-        
-        if not products:
-            return {"message": "No products found", "products": []}
-        
-        return products
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving products: {str(e)}"
-        )
-
-
-@router.get("/{product_id}")
-def get_single_product(
-    session: SessionDep,
-    product_id: int,
-    authorization: str = Header(...)
-):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    
-    try:
-        product = get_single_data(product_id, "product", session)
-        
-        if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
-            )
-        
-        return {"message": "Product retrieved successfully", "product": product}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving product: {str(e)}"
-        )
-
-
-@router.put('/update_product/{product_id}')
-async def update_product(
-    session: SessionDep,
-    product_id: int,
-    name: Optional[str] = Form(None),
-    price: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
-    category: Optional[str] = Form(None),
-    quantity: Optional[str] = Form(None),
-    image: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
-):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    
-    try:
-        # Get existing product
-        existing_product = get_single_data(product_id, "product", session)
-        if not existing_product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
-            )
-        
-        # Verify admin owns this product
-        if existing_product.admin_id != auth.get("admin_id"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to update this product"
-            )
-        
-        # Prepare update dict (only include fields that are provided)
-        product_dict = {}
-        
-        if name is not None:
-            product_dict["name"] = name
-        if price is not None:
-            product_dict["price"] = price
-        if description is not None:
-            product_dict["description"] = description
-        if category is not None:
-            product_dict["category"] = category
-        if quantity is not None:
-            product_dict["quantity"] = quantity
-        
-        # Handle file upload if new file provided
-        if image:
-            image_url = await handle_file_upload(image)
-            product_dict["image_url"] = image_url
-        
-        # Update product using CRUD function
-        success, updated_product = update_data("product", product_id, product_dict, session)
-        
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to update product"
-            )
-        
-        return {"message": "Product updated successfully", "product": updated_product}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating product: {str(e)}"
-        )
-
-
-@router.delete('/delete_product/{product_id}')
-def delete_product(
-    session: SessionDep,
-    product_id: int,
-    authorization: str = Header(...)
-):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    
-    try:
-        # Get existing product
-        existing_product = get_single_data(product_id, "product", session)
-        if not existing_product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
-            )
-        
-        # Verify admin owns this product
-        if existing_product.admin_id != auth.get("admin_id"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this product"
-            )
-        
-        # Delete product using CRUD function
-        success = delete_data("product", product_id, session)
-        
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete product"
-            )
-        
-        return {"message": "Product deleted successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting product: {str(e)}"
-        )
+    stmt = select(Product)
+    if company_id:  # admin (None) sees everything
+        stmt = stmt.where(Product.company_id == company_id)
+    return session.exec(stmt.order_by(Product.created_at.desc())).all()

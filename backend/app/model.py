@@ -1,7 +1,7 @@
 import enum
 import uuid
-from datetime import datetime, timezone
-from typing import Optional, List
+from datetime import datetime, timezone, date
+from typing import Optional, List, Dict, Any
 from enum import Enum
 from sqlalchemy import Column, Enum as SqlEnum, JSON, String
 from sqlmodel import SQLModel, Field, Relationship
@@ -135,4 +135,264 @@ class AdminProfile(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
     identity: Optional[AuthIdentity] = Relationship(back_populates="admin_profile")
-  
+
+
+# ---------------------------------------------------------------------------
+# Domain models. Everything below is scoped by company_id — every query in
+# every router MUST filter on it (use auth.authentication.scope_to_company).
+# Admins bypass the filter (scope_to_company returns None for them).
+# ---------------------------------------------------------------------------
+
+class ProductStatus(str, enum.Enum):
+    AVAILABLE = "available"
+    OUT_OF_STOCK = "out_of_stock"
+
+
+class Product(SQLModel, table=True):
+    __tablename__ = "products"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    name: str
+    description: Optional[str] = None
+    price: float
+    category: Optional[str] = None
+    quantity: int = Field(default=0)
+    image_url: Optional[str] = None
+    status: ProductStatus = Field(
+        default=ProductStatus.AVAILABLE,
+        sa_column=Column(SqlEnum(ProductStatus), nullable=False),
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class Sale(SQLModel, table=True):
+    """A sale always deducts from Product.quantity — see api/sales.py."""
+    __tablename__ = "sales"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    product_id: str = Field(foreign_key="products.id", nullable=False, index=True)
+    staff_id: Optional[str] = Field(default=None, foreign_key="staff_profiles.id")
+    quantity_sold: int
+    unit_price: float          # snapshot of product.price at time of sale
+    total_amount: float        # unit_price * quantity_sold
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class RoomStatus(str, enum.Enum):
+    AVAILABLE = "available"
+    OCCUPIED = "occupied"
+    MAINTENANCE = "maintenance"
+
+
+class Room(SQLModel, table=True):
+    __tablename__ = "rooms"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    number: str
+    room_type: Optional[str] = None
+    description: Optional[str] = None
+    price: float
+    status: RoomStatus = Field(
+        default=RoomStatus.AVAILABLE,
+        sa_column=Column(SqlEnum(RoomStatus), nullable=False),
+    )
+    image_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class BookingStatus(str, enum.Enum):
+    CONFIRMED = "confirmed"
+    CHECKED_IN = "checked_in"
+    CHECKED_OUT = "checked_out"
+    CANCELLED = "cancelled"
+
+
+class RoomBooking(SQLModel, table=True):
+    __tablename__ = "room_bookings"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    room_id: str = Field(foreign_key="rooms.id", nullable=False, index=True)
+    reserve_id: str = Field(index=True, unique=True)
+    customer_name: str
+    customer_email: Optional[str] = None
+    customer_phone: Optional[str] = None
+    check_in: date
+    check_out: date
+    status: BookingStatus = Field(
+        default=BookingStatus.CONFIRMED,
+        sa_column=Column(SqlEnum(BookingStatus), nullable=False),
+    )
+    booked_via: str = Field(default="staff")  # "staff" | "ai_receptionist"
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class HotelProfile(SQLModel, table=True):
+    """One row per company. Feeds the AI receptionist's context."""
+    __tablename__ = "hotel_profile"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", unique=True, nullable=False)
+    hotel_name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    description: Optional[str] = None
+    website_url: Optional[str] = None
+    image_url: Optional[str] = None
+    social_links: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+
+
+class Customer(SQLModel, table=True):
+    """Campaign audience + booking history lookup."""
+    __tablename__ = "customers"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    name: Optional[str] = None
+    email: Optional[str] = Field(default=None, index=True)
+    phone: Optional[str] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class CampaignChannel(str, enum.Enum):
+    EMAIL = "email"
+    SMS = "sms"
+    BOTH = "both"
+
+
+class CampaignAudience(str, enum.Enum):
+    ALL_CUSTOMERS = "all_customers"
+    SPECIFIC = "specific"   # explicit list of customer_ids on CampaignRecipient
+
+
+class CampaignStatus(str, enum.Enum):
+    DRAFT = "draft"
+    QUEUED = "queued"
+    SENDING = "sending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class Campaign(SQLModel, table=True):
+    __tablename__ = "campaigns"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    name: str
+    channel: CampaignChannel = Field(sa_column=Column(SqlEnum(CampaignChannel), nullable=False))
+    audience: CampaignAudience = Field(
+        default=CampaignAudience.ALL_CUSTOMERS,
+        sa_column=Column(SqlEnum(CampaignAudience), nullable=False),
+    )
+    subject: Optional[str] = None      # used for email
+    message: str                       # body for email(text/html) or sms
+    status: CampaignStatus = Field(
+        default=CampaignStatus.DRAFT,
+        sa_column=Column(SqlEnum(CampaignStatus), nullable=False),
+    )
+    scheduled_at: Optional[datetime] = None  # null => send immediately on create
+    created_by: str = Field(foreign_key="auth_identities.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class DeliveryStatus(str, enum.Enum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class CampaignRecipient(SQLModel, table=True):
+    """The 'campaign history' — one row per message actually dispatched."""
+    __tablename__ = "campaign_recipients"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    campaign_id: str = Field(foreign_key="campaigns.id", nullable=False, index=True)
+    customer_id: Optional[str] = Field(default=None, foreign_key="customers.id")
+    channel: CampaignChannel = Field(sa_column=Column(SqlEnum(CampaignChannel), nullable=False))
+    destination: str = Field(nullable=False)   # email address or phone number
+    status: DeliveryStatus = Field(
+        default=DeliveryStatus.PENDING,
+        sa_column=Column(SqlEnum(DeliveryStatus), nullable=False),
+    )
+    provider_message_id: Optional[str] = None
+    error: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class StaffShift(SQLModel, table=True):
+    __tablename__ = "staff_shifts"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    staff_id: str = Field(foreign_key="staff_profiles.id", nullable=False, index=True)
+    label: Optional[str] = None            # "Morning", "Night" ...
+    starts_at: datetime
+    ends_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class StaffCheckIn(SQLModel, table=True):
+    """A staff member's own attendance record for a shift/workday."""
+    __tablename__ = "staff_check_ins"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    staff_id: str = Field(foreign_key="staff_profiles.id", nullable=False, index=True)
+    shift_id: Optional[str] = Field(default=None, foreign_key="staff_shifts.id")
+    check_in_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    check_out_at: Optional[datetime] = None
+    note: Optional[str] = None
+
+
+class TaskStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+
+class StaffTask(SQLModel, table=True):
+    __tablename__ = "staff_tasks"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    staff_id: str = Field(foreign_key="staff_profiles.id", nullable=False, index=True)
+    assigned_by: str = Field(foreign_key="auth_identities.id")
+    title: str
+    description: Optional[str] = None
+    status: TaskStatus = Field(
+        default=TaskStatus.PENDING,
+        sa_column=Column(SqlEnum(TaskStatus), nullable=False),
+    )
+    due_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class StaffNotification(SQLModel, table=True):
+    """staff_id = null means broadcast to the whole company's staff."""
+    __tablename__ = "staff_notifications"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    staff_id: Optional[str] = Field(default=None, foreign_key="staff_profiles.id", index=True)
+    title: str
+    body: str
+    is_read: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
+class Dataset(SQLModel, table=True):
+    """Extra Q&A/intent pairs the AI receptionist should answer from,
+    on top of live rooms/products/hotel_profile data."""
+    __tablename__ = "dataset"
+
+    id: str = Field(default_factory=gen_uuid, primary_key=True)
+    company_id: str = Field(foreign_key="companies.id", nullable=False, index=True)
+    title: str
+    description: Optional[str] = None
+    intent: Optional[List[Dict[str, Any]]] = Field(default_factory=list, sa_column=Column(JSON))

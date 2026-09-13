@@ -1,295 +1,292 @@
-# CRUD staff
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form
-from fastapi import status as http_status
-from typing import Optional
+# Staff attendance, shifts, tasks, and notifications.
+# Staff account creation/invite lives in app/auth/authentication.py
+# (POST /auth/staff/invite) — this router is everything a staff member
+# does day-to-day once their account exists.
+from typing import Optional, List
 from datetime import datetime
-from app.database import SessionDep
-from app.model import Staff
-from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized,  hash_password, create_jwt_token
-from app.services.upload import handle_file_upload
-from sqlmodel import select
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlmodel import Session, select, or_
+
+from app.database import get_session
+from app.model import (
+    StaffCheckIn, StaffShift, StaffTask, StaffNotification, StaffProfile,
+    TaskStatus, Role,
+)
+from app.auth.authentication import CurrentUser, require_role, scope_to_company
+
+router = APIRouter(prefix="/staff", tags=["staff"])
 
 
-router = APIRouter(prefix="/staff")
+def _require_staff(current_user: CurrentUser) -> str:
+    """StaffProfile.id, not the auth identity id, is the FK used everywhere
+    below. The JWT only carries company_id, so callers hitting these routes
+    as staff must resolve their own StaffProfile row first."""
+    if current_user.role != Role.STAFF:
+        raise HTTPException(status_code=403, detail="Only staff accounts use this endpoint")
+    return current_user.id
 
-@router.post('/create_staff')
-async def create_staff(
-    session: SessionDep,
-    name: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    bio: Optional[str] = Form(None),
-    role: Optional[str] = Form(None),
-    image: Optional[UploadFile] = File(None),
-    cv: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+
+# --- check-in / check-out ---------------------------------------------------
+
+class CheckInRead(BaseModel):
+    id: str
+    staff_id: str
+    shift_id: Optional[str]
+    check_in_at: datetime
+    check_out_at: Optional[datetime]
+    note: Optional[str]
+
+
+@router.post("/check-in", response_model=CheckInRead, status_code=status.HTTP_201_CREATED)
+def check_in(
+    shift_id: Optional[str] = None,
+    note: Optional[str] = None,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.STAFF)),
+    session: Session = Depends(get_session),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)  
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    
-    try:
-        hashed_password = hash_password(password)
-        jwt_token = create_jwt_token(email, role)
-        # Handle file uploads
-        image_url = None
-        if image:
-            image_url = await handle_file_upload(image)
-
-        cv_url = None
-        if cv:
-            cv_url = await handle_file_upload(cv )
-
-        # Prepare data for database
-        staff_dict = {
-            "admin_id": auth.get("admin_id"),
-            "name": name,
-            "email": email,
-            "password": hashed_password,
-            "prev_password": password,
-            "jwt_token": jwt_token,
-            "bio": bio,
-            "role": role,
-            "image_url": image_url,
-            "cv_url": cv_url,
-            "created_at": datetime.utcnow()
-        }
-
-        success, staff = create_data("staff", staff_dict, session)
-
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create staff"
-            )
-
-        return {"message": "Staff created successfully", "staff": staff}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating staff: {str(e)}"
-        )
+    staff_profile_id = _resolve_staff_profile_id(session, current_user)
+    record = StaffCheckIn(
+        company_id=company_id,
+        staff_id=staff_profile_id,
+        shift_id=shift_id,
+        note=note,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
 
 
-@router.get("/get_staff")
-def read_staff(
-    session: SessionDep,
-    authorization: str = Header(...)
+@router.post("/check-out/{check_in_id}", response_model=CheckInRead)
+def check_out(
+    check_in_id: str,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.STAFF)),
+    session: Session = Depends(get_session),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
+    record = session.get(StaffCheckIn, check_in_id)
+    staff_profile_id = _resolve_staff_profile_id(session, current_user)
+    if not record or record.staff_id != staff_profile_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Check-in not found")
+    if record.check_out_at:
+        raise HTTPException(status_code=400, detail="Already checked out")
 
-    try:
-        staff_list = get_admin_data(auth["admin_id"], "staff", session)
-
-        if not staff_list:
-            return {"message": "No staff found", "staff": []}
-
-        return  staff_list
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving staff: {str(e)}"
-        )
+    record.check_out_at = datetime.utcnow()
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
 
 
-# @router.get("/{staff_id}")
-# def get_single_staff(
-#     session: SessionDep,
-#     staff_id: int,
-#     authorization: str = Header(...)
-# ):
-#     token = authorization.split(" ")[1]
-#     auth = isAuthorized(token)
-#     if not auth:
-#         raise HTTPException(status_code=401, detail="Not authorized")
-#     if auth.get("role") != "admin":
-#         raise HTTPException(status_code=401, detail="Not authorized")
-
-#     try:
-#         staff = get_single_data(staff_id, "staff", session)
-
-#         if not staff:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND,
-#                 detail="Staff not found"
-#             )
-
-#         return {"message": "Staff retrieved successfully", "staff": staff}
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Error retrieving staff: {str(e)}"
-#         )
-
-
-@router.put('/update_staff/{staff_id}')
-async def update_staff(
-    session: SessionDep,
-    staff_id: int,
-    name: Optional[str] = Form(None),
-    email: Optional[str] = Form(None),
-    password: Optional[str] = Form(None),
-    bio: Optional[str] = Form(None),
-    role: Optional[str] = Form(None),
-    image: Optional[UploadFile] = File(None),
-    cv: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+@router.get("/check-ins", response_model=List[CheckInRead])
+def list_check_ins(
+    staff_id: Optional[str] = None,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY, Role.STAFF, Role.ADMIN)),
+    session: Session = Depends(get_session),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-
-    try:
-        # Get existing staff
-        existing_staff = get_single_data(staff_id, "staff", session)
-        if not existing_staff:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Staff not found"
-            )
-
-        # Verify admin owns this staff
-        if existing_staff.admin_id != auth.get("admin_id"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to update this staff"
-            )
-
-        # Prepare update dict (only include fields that are provided)
-        staff_dict = {}
-
-        hashed_password = hash_password(password)
-        
-        # Generate JWT
-        jwt_token = create_jwt_token(email, role)
-        if name is not None:
-            staff_dict["name"] = name
-        if email is not None:
-            staff_dict["email"] = email
-        if password is not None:
-            staff_dict["password"] = hashed_password
-            staff_dict["prev_password"] = password
-        if bio is not None:
-            staff_dict["bio"] = bio
-        if role is not None:
-            staff_dict["role"] = role
-            staff_dict["jwt_token"] = jwt_token
-
-        # Handle file uploads if new files provided
-        if image:
-            image_url = await handle_file_upload(image)
-            staff_dict["image_url"] = image_url
-
-        if cv:
-            cv_url = await handle_file_upload(cv)
-            staff_dict["cv_url"] = cv_url
-
-        # Update staff using CRUD function
-        success, updated_staff = update_data("staff", staff_id, staff_dict, session)
-
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to update staff"
-            )
-
-        return {"message": "Staff updated successfully", "staff": updated_staff}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating staff: {str(e)}"
-        )
+    """Company/managers see everyone; a staff account only ever sees its own."""
+    stmt = select(StaffCheckIn)
+    if company_id:
+        stmt = stmt.where(StaffCheckIn.company_id == company_id)
+    if current_user.role == Role.STAFF:
+        stmt = stmt.where(StaffCheckIn.staff_id == _resolve_staff_profile_id(session, current_user))
+    elif staff_id:
+        stmt = stmt.where(StaffCheckIn.staff_id == staff_id)
+    return session.exec(stmt.order_by(StaffCheckIn.check_in_at.desc())).all()
 
 
-@router.delete('/delete_staff/{staff_id}')
-def delete_staff(
-    session: SessionDep,
-    staff_id: int,
-    authorization: str = Header(...)
+# --- shifts ------------------------------------------------------------------
+
+class ShiftCreate(BaseModel):
+    staff_id: str
+    label: Optional[str] = None
+    starts_at: datetime
+    ends_at: datetime
+
+
+class ShiftRead(BaseModel):
+    id: str
+    staff_id: str
+    label: Optional[str]
+    starts_at: datetime
+    ends_at: datetime
+
+
+@router.post("/shifts", response_model=ShiftRead, status_code=status.HTTP_201_CREATED)
+def create_shift(
+    payload: ShiftCreate,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY)),
+    session: Session = Depends(get_session),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
+    shift = StaffShift(company_id=company_id, **payload.dict())
+    session.add(shift)
+    session.commit()
+    session.refresh(shift)
+    return shift
 
-    try:
-        # Get existing staff
-        existing_staff = get_single_data(staff_id, "staff", session)
-        if not existing_staff:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Staff not found"
-            )
 
-        # Verify admin owns this staff
-        if existing_staff.admin_id != auth.get("admin_id"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this staff"
-            )
+@router.get("/shifts", response_model=List[ShiftRead])
+def list_shifts(
+    staff_id: Optional[str] = None,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY, Role.STAFF, Role.ADMIN)),
+    session: Session = Depends(get_session),
+):
+    stmt = select(StaffShift)
+    if company_id:
+        stmt = stmt.where(StaffShift.company_id == company_id)
+    if current_user.role == Role.STAFF:
+        stmt = stmt.where(StaffShift.staff_id == _resolve_staff_profile_id(session, current_user))
+    elif staff_id:
+        stmt = stmt.where(StaffShift.staff_id == staff_id)
+    return session.exec(stmt.order_by(StaffShift.starts_at.desc())).all()
 
-        # Delete staff using CRUD function
-        success = delete_data("staff", staff_id, session)
 
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete staff"
-            )
+# --- tasks ---------------------------------------------------------------
 
-        return {"message": "Staff deleted successfully"}
+class TaskCreate(BaseModel):
+    staff_id: str
+    title: str
+    description: Optional[str] = None
+    due_at: Optional[datetime] = None
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting staff: {str(e)}"
-        )
-        
-@router.get('/profile')
-def staff_profile(
-    session: SessionDep,
-    authorization: str = Header(...)
-    
-    ):
-    
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
- 
-    try:
-        result = get_single_data(auth["staff_id"], "staff", session)
-        
-        return result
-    
-    except Exception as e:
-        print(f"Error getting profile: {e}")
-        return False
-        
-        
-        
+
+class TaskUpdate(BaseModel):
+    status: TaskStatus
+
+
+class TaskRead(BaseModel):
+    id: str
+    staff_id: str
+    title: str
+    description: Optional[str]
+    status: TaskStatus
+    due_at: Optional[datetime]
+    created_at: datetime
+
+
+@router.post("/tasks", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+def create_task(
+    payload: TaskCreate,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY)),
+    session: Session = Depends(get_session),
+):
+    task = StaffTask(company_id=company_id, assigned_by=current_user.id, **payload.dict())
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
+
+
+@router.get("/tasks", response_model=List[TaskRead])
+def list_tasks(
+    staff_id: Optional[str] = None,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY, Role.STAFF, Role.ADMIN)),
+    session: Session = Depends(get_session),
+):
+    stmt = select(StaffTask)
+    if company_id:
+        stmt = stmt.where(StaffTask.company_id == company_id)
+    if current_user.role == Role.STAFF:
+        stmt = stmt.where(StaffTask.staff_id == _resolve_staff_profile_id(session, current_user))
+    elif staff_id:
+        stmt = stmt.where(StaffTask.staff_id == staff_id)
+    return session.exec(stmt.order_by(StaffTask.created_at.desc())).all()
+
+
+@router.patch("/tasks/{task_id}", response_model=TaskRead)
+def update_task_status(
+    task_id: str,
+    payload: TaskUpdate,
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY, Role.STAFF)),
+    session: Session = Depends(get_session),
+):
+    task = session.get(StaffTask, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    if current_user.role == Role.STAFF and task.staff_id != _resolve_staff_profile_id(session, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
+
+    task.status = payload.status
+    task.updated_at = datetime.utcnow()
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
+
+
+# --- notifications ---------------------------------------------------------
+
+class NotifyCreate(BaseModel):
+    title: str
+    body: str
+    staff_id: Optional[str] = None  # omit to broadcast to the whole company
+
+
+class NotificationRead(BaseModel):
+    id: str
+    staff_id: Optional[str]
+    title: str
+    body: str
+    is_read: bool
+    created_at: datetime
+
+
+@router.post("/notify", response_model=NotificationRead, status_code=status.HTTP_201_CREATED)
+def notify_staff(
+    payload: NotifyCreate,
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.COMPANY)),
+    session: Session = Depends(get_session),
+):
+    notification = StaffNotification(company_id=company_id, **payload.dict())
+    session.add(notification)
+    session.commit()
+    session.refresh(notification)
+    return notification
+
+
+@router.get("/notifications", response_model=List[NotificationRead])
+def list_notifications(
+    company_id: Optional[str] = Depends(scope_to_company),
+    current_user: CurrentUser = Depends(require_role(Role.STAFF)),
+    session: Session = Depends(get_session),
+):
+    staff_profile_id = _resolve_staff_profile_id(session, current_user)
+    stmt = select(StaffNotification).where(
+        StaffNotification.company_id == company_id,
+        or_(StaffNotification.staff_id == staff_profile_id, StaffNotification.staff_id == None),  # noqa: E711
+    )
+    return session.exec(stmt.order_by(StaffNotification.created_at.desc())).all()
+
+
+@router.post("/notifications/{notification_id}/read", response_model=NotificationRead)
+def mark_notification_read(
+    notification_id: str,
+    current_user: CurrentUser = Depends(require_role(Role.STAFF)),
+    session: Session = Depends(get_session),
+):
+    notification = session.get(StaffNotification, notification_id)
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
+    notification.is_read = True
+    session.add(notification)
+    session.commit()
+    session.refresh(notification)
+    return notification
+
+
+def _resolve_staff_profile_id(session: Session, current_user: CurrentUser) -> str:
+    profile = session.exec(
+        select(StaffProfile).where(StaffProfile.auth_identity_id == current_user.id)
+    ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="No staff profile for this account")
+    return profile.id
