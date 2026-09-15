@@ -387,7 +387,7 @@ def send_mail_with_attachment(
 
 # The task
 @celery_app.task(bind=True)
-def send_sms(self, to, body, sender):
+def send_bulk_sms(self, to, body, sender):
     task_id = self.request.id
     
     if isinstance(to, str):

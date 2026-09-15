@@ -16,3 +16,4 @@ redis
 twilio
 requests
 openai
+africastalking

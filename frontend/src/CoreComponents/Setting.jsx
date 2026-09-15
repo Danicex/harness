@@ -95,10 +95,7 @@ export default function HotelProfileView() {
         <Button onClick={handleLogout} variant="outline" className="text-red-400">
           <LogOut className="mr-2 h-4 w-4" /> Logout
         </Button>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Theme</span>
-          <ThemeToggle />
-        </div>
+        
       </div>
       
       {error && (

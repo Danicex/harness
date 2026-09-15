@@ -9,7 +9,7 @@ from app.auth.authentication import isAuthorized
 import csv
 import io
 
-router = APIRouter(prefix="/customer")
+router = APIRouter(prefix="/customer", tags=["customer"])
 
 @router.post('/create_customer')
 def create_customer(

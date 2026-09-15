@@ -7,7 +7,7 @@ from app.model import CallLog
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
 from app.auth.authentication import isAuthorized
 
-router = APIRouter(prefix="/call_log")
+router = APIRouter(prefix="/call_log", tags=["call_logs"])
 
 @router.post('/create_call_log')
 def create_call_log(

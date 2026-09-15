@@ -7,7 +7,7 @@ from app.model import Dataset
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_admin_data_single, get_single_data
 from app.auth.authentication import isAuthorized
 import json
-router = APIRouter(prefix="/dataset")
+router = APIRouter(prefix="/dataset", tags=["dataset"])
 
 @router.post('/create_dataset')
 async def create_dataset(

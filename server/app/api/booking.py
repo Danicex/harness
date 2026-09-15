@@ -12,7 +12,7 @@ from app.services.mailer import send_mail
 import random
 import string
 
-router = APIRouter(prefix="/booking")
+router = APIRouter(prefix="/booking", tags=["booking"])
 def generate_reserve():
     reserve_id = (
             "".join(random.choices(string.ascii_uppercase, k=3))

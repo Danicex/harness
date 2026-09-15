@@ -8,7 +8,7 @@ from app.crud import create_data, update_data, delete_data, get_admin_data, get_
 from app.auth.authentication import isAuthorized
 from app.services.upload import handle_file_upload
 
-router = APIRouter(prefix="/room")
+router = APIRouter(prefix="/room", tags=["rooms"])
 
 @router.post('/create_room')
 async def create_room(

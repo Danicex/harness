@@ -2,13 +2,14 @@ from typing import Optional
 from app.database import SessionDep
 from sqlmodel import select, and_, desc, func
 from sqlalchemy.sql import extract
-from app.model import Admin, Product, HotelProfile, Sales, Staff, Booking, Customer, Inbox, Blog, Dataset, CallLog, Room, HotelProfile
+from app.model import Admin, Product, HotelProfile, Sales, Staff, Booking, Customer, Inbox, Blog, Dataset, CallLog, Room, HotelProfile, Attendance
 from datetime import datetime, timedelta
 
 obj_map = {
     "product": Product,
     "hotel_profile": HotelProfile,
     "customer": Customer,
+    "attendance": Attendance,
     "sale": Sales,
     "booking": Booking,
     "staff": Staff,

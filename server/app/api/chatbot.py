@@ -17,7 +17,7 @@ client = AsyncOpenAI(api_key=api_key)
 
 redis = Redis(host="localhost", port=6379, decode_responses=True)
 
-router = APIRouter(prefix="/chat")
+router = APIRouter(prefix="/chat", tags=["chatbot"])
 
 CACHE_TTL = 3600  # 1 hour
 

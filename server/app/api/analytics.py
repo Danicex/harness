@@ -7,7 +7,7 @@ from app.auth.authentication import isAuthorized
 from sqlmodel import select, func
 from app.model import Product, Room, Sales, Booking  # Import your models
 
-router = APIRouter(prefix="/analytics")
+router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get('/dashboard')
 async def get_dashboard_data(

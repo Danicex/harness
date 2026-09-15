@@ -1,29 +1,6 @@
------------------------ goal ---------------------
-- re contruct auth
-- inventory deduction
-api: crud product / create sales that update product quantity
-
-- sms and email campagne / campagne history
-api: create campagne and view history
-backgroung task with celery & beat to send mail (resend) / sms (a very cheap option available to nigeria)
-store campagne history in db
-
-- staff check-in / shift time / task / notify staff
-api: check-in /
-
-- ai receptionist / book room / give info 
-a regular chatbot trained on the hotel data (this data is fetched from db unique to hotels)
----------------------------------------------------
---------------------- rules -----------------------
-- dont code everything code only api endpoints / core function / db schema / 
-- its a fastapi and react app 
-- it uses sqlmodel and postgresql
------------------------steps---------------------------
-- create the inventory backend logic
-    - create product endpoint # a single endpoint
-    - create and read sales endpoint #2 api endpoints, this updates the product quantity and status (available / out of stock)
-
-- campagne
----------------------------------------------------
-
-
+inventory deduction ✅
+staff check-in check-out ✅
+assign task to staff  ✅ 
+sms / mail messaging - user per sender id. 
+chat bot / assistant 
+payment / laguage / currency

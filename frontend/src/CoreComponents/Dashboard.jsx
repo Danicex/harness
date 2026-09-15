@@ -18,6 +18,7 @@ import {
   BookCheck,
   CircleDollarSign,
   History,
+  Check, ListTodo
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import logo from '../assets/963c7620-ebc1-427c-b9c2-009612cfa83b.png';
@@ -31,7 +32,6 @@ import api from "@/lib/api"
 // the user actually opens it — paired with <Suspense fallback={<PageSpinner />}>
 // below so the rest of the dashboard (sidebar, header) stays interactive
 // while a panel's chunk is loading.
-
 
 const RenderAnalytics = lazy(() => import("./RenderAnalytics"))
 const Room = lazy(() => import("./Room"))
@@ -47,7 +47,63 @@ const Inbox = lazy(() => import("./Inbox"))
 const Blog = lazy(() => import("./Blog"))
 const Setting = lazy(() => import("./Setting"))
 const Chatbot = lazy(() => import("./Chatbot"))
+const AttendanceDisplay = lazy(() => import("./AttendanceDisplay"))
+const AttendanceScanner = lazy(() => import("@/staff_endpoint/AttendantScanner"))
 const ProfilePage = lazy(() => import("@/staff_endpoint/StaffProfile"))
+const TaskManagement = lazy(() => import("./TaskManagement"))
+
+// NOTE: AttendanceDisplay (the rotating-QR kiosk screen) is intentionally NOT
+// wired into this authenticated dashboard. It's meant to run unattended on a
+// wall-mounted screen/tablet at the entrance, so it should live on its own
+// standalone route (e.g. /kiosk/attendance) outside the login-gated app shell.
+
+// Tabs every role sees, appended after their role-specific tabs.
+// reg_attendant (self check-in scanner) lives here, not per-role, since
+// every employee — regardless of role — needs to be able to check themselves in.
+const COMMON_TABS = [
+  { id: 'reg_attendant', label: 'Register Attendance', icon: User },
+  { id: 'chatbot', label: 'Chatbot', icon: BotMessageSquare },
+]
+
+// Tabs unique to each role. Roles not listed here fall back to DEFAULT_ROLE_TABS.
+const ROLE_TABS = {
+  admin: [
+    { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'attendance', label: 'Attendance', icon: Check },
+    { id: 'room', label: 'Rooms', icon: Hotel },
+    { id: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'bookings', label: 'Bookings', icon: BookCheck },
+    { id: 'sales', label: 'Sales', icon: CircleDollarSign },
+    { id: 'customers', label: 'Customers', icon: Group },
+    { id: 'staff', label: 'Staff', icon: Users },
+    { id: 'task', label: 'Task Management', icon: ListTodo  },
+    { id: 'inbox', label: 'Inbox', icon: Mail },
+    { id: 'blog', label: 'Blog', icon: FileText },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ],
+  receptionist: [
+    { id: 'bookings', label: 'Bookings', icon: BookCheck },
+    { id: 'profile', label: 'Profile', icon: User },
+
+  ],
+  sales_attendant: [
+    { id: 'sales', label: 'Sales', icon: CircleDollarSign },
+    { id: 'profile', label: 'Profile', icon: User },
+  ],
+}
+// manager sees the same tabs as admin
+ROLE_TABS.manager = ROLE_TABS.admin
+
+// Roles with no role-specific tabs of their own still get COMMON_TABS
+// (which includes Register Attendance) via the ?? fallback below.
+const DEFAULT_ROLE_TABS = []
+
+// Which tab a role should land on when they first open the dashboard.
+// Roles not listed here keep whatever tab is already active (default: "home").
+const DEFAULT_TAB_BY_ROLE = {
+  receptionist: 'bookings',
+  sales_attendant: 'sales',
+}
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("home");
@@ -67,46 +123,22 @@ export default function Dashboard() {
     get_admin_profile();
   }, []);
 
-  // Role-specific tabs using useMemo
+  // Pure derivation of the visible nav — no side effects, safe in useMemo.
   const tabs = useMemo(() => {
-    // Admin tabs
-    const allowed_role = ["admin", "manager"] 
-    if (allowed_role.includes(user_role)) {
-      return [
-        { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'room', label: 'Rooms', icon: Hotel },
-        { id: 'inventory', label: 'Inventory', icon: Package },
-        { id: 'bookings', label: 'Bookings', icon: BookCheck },
-        { id: 'sales', label: 'Sales', icon: CircleDollarSign },
-        { id: 'customers', label: 'Customers', icon: Group },
-        { id: 'staff', label: 'Staff', icon: Users },
-        { id: 'inbox', label: 'Inbox', icon: Mail },
-        { id: 'chatbot', label: 'Chatbot', icon: BotMessageSquare },
-        { id: 'blog', label: 'Blog', icon: FileText },
-        { id: 'settings', label: 'Settings', icon: Settings },
-      ];
+    const roleTabs = ROLE_TABS[user_role] ?? DEFAULT_ROLE_TABS;
+    if(user_role == "admin"){
+      return [...roleTabs];
     }
+     return [...roleTabs, ...COMMON_TABS];
+  }, [user_role]);
 
-    // Staff/representative tabs
-    if (user_role === 'receptionist') {
-      setActiveTab("bookings")
-      return [
-        { id: 'bookings', label: 'Bookings', icon: BookCheck },
-        { id: 'chatbot', label: 'Chatbot', icon: BotMessageSquare },
-        { id: 'profile', label: 'Profile', icon: User },
-      ];
+  // Side effect (changing the active tab on role load) lives in its own
+  // effect instead of inside useMemo.
+  useEffect(() => {
+    const defaultTab = DEFAULT_TAB_BY_ROLE[user_role];
+    if (defaultTab) {
+      setActiveTab(defaultTab);
     }
-
-    if (user_role === 'sales_attendant') {
-            setActiveTab("inventory")
-      return [
-        { id: 'sales', label: 'Sales', icon: CircleDollarSign },
-        { id: 'chatbot', label: 'Chatbot', icon: BotMessageSquare },
-        { id: 'profile', label: 'Profile', icon: User },
-      ];
-    }
-
-  
   }, [user_role]);
 
   // Component mapping for better performance
@@ -115,6 +147,7 @@ export default function Dashboard() {
     room: Room,
     inventory: Inventory,
     bookings: BookingList,
+    reg_attendant: AttendanceScanner,
     sales: SalesList,
     customers: CustomerList,
     campaign_history: CampaignHistory,
@@ -123,16 +156,17 @@ export default function Dashboard() {
     inbox: Inbox,
     chatbot: Chatbot,
     blog: Blog,
-    settings: Setting,
     profile: ProfilePage,
+    attendance: AttendanceDisplay,
     automated_calls: AutomatedCalls,
+    settings: Setting,
+    task: TaskManagement,
   }), []);
 
   // Render active tab content
   const renderTabContent = () => {
     const Component = componentMap[activeTab];
 
-  
     // CustomerList needs to be able to jump to the Campaign History tab.
     if (activeTab === "customers") {
       return <Component onNavigate={setActiveTab} />;

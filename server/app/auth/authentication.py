@@ -18,7 +18,7 @@ import secrets
 from jose.exceptions import JWTError, ExpiredSignatureError
 
 # define all auth routes
-router = APIRouter(prefix="/auth")
+router = APIRouter(prefix="/auth", tags=["authentication"])
 # config 
 REDIS_PORT = os.getenv("REDIS_PORT")
 ACCESS_TOKEN_EXPIRE_DAYS = 30

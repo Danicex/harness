@@ -11,7 +11,7 @@ from app.services.upload import handle_file_upload
 from sqlmodel import select
 
 
-router = APIRouter(prefix="/staff")
+router = APIRouter(prefix="/staff", tags=["staff"])
 
 @router.post('/create_staff')
 async def create_staff(

@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import create_db_and_tables
-from app.api import product, staff, blog, call_log, dataset, inbox, rooms, customer, sales, booking,  hotel_profile, analytics, task_api, chatbot
+from app.api import product, staff, blog, call_log, dataset, inbox, rooms, customer, sales, booking,  hotel_profile, analytics, task_api, chatbot, attendance
 from app.auth import authentication
 import os
 from app.tasks import update_room_statuses
@@ -60,6 +60,7 @@ app.include_router(hotel_profile.router)
 app.include_router(blog.router)
 app.include_router(analytics.router)
 app.include_router(authentication.router)
+app.include_router(attendance.router)
 
 @app.get("/run-task")
 def run_task():

@@ -1,22 +1,41 @@
-import requests
+import os
+import africastalking
+from dotenv import load_dotenv
 
-def send_bulk_sms(message, phone_numbers, sender_id, user_name):
-    url = "https://api.africastalking.com/version1/messaging/bulk"
+load_dotenv()
 
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "apiKey": "YOUR_API_KEY",  # Replace with your API key
-    }
+USERNAME = os.getenv("AFRICASTALKING_USERNAME")
+API_KEY = os.getenv("AFRICASTALKING_API_KEY")
+SENDER_ID = os.getenv("AFRICASTALKING_SENDER_ID")
 
-    payload = {
-        "username": user_name,  # Replace with your Africa's Talking username
-        "message": message,
-        "senderId": sender_id,
-        "phoneNumbers": phone_numbers,
-    }
+africastalking.initialize(USERNAME, API_KEY)
 
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
+sms = africastalking.SMS
 
-    return response.json()
+
+def send_sms(phone_number: str, message: str):
+    try:
+        response = sms.send(
+            message,
+            [phone_number],
+            sender_id=SENDER_ID
+        )
+
+        return response
+
+    except Exception as e:
+        raise Exception(f"SMS sending failed: {str(e)}")
+
+
+def send_bulk_sms(phone_numbers: list[str], message: str):
+    try:
+        response = sms.send(
+            message,
+            phone_numbers,
+            sender_id=SENDER_ID
+        )
+
+        return response
+
+    except Exception as e:
+        raise Exception(f"Bulk SMS sending failed: {str(e)}")

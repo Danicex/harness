@@ -7,7 +7,7 @@ from app.model import Inbox
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
 from app.auth.authentication import isAuthorized
 
-router = APIRouter(prefix="/inbox")
+router = APIRouter(prefix="/inbox", tags=["inbox"])
 
 @router.post('/create_inbox/{admin_id}')
 def create_inbox(

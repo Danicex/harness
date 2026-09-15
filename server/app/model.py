@@ -3,11 +3,11 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from sqlalchemy.dialects.postgresql import JSONB
 from decimal import Decimal, InvalidOperation
-
+from enum import Enum
 
 class Admin(SQLModel, table=True):
     __tablename__ = "admin"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     password: str
@@ -17,19 +17,18 @@ class Admin(SQLModel, table=True):
     reset_password_expiry: Optional[datetime] = None
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    
-    dataset: List["Dataset"] = Relationship(back_populates="admin")
+
     products: List["Product"] = Relationship(back_populates="admin")
     customers: List["Customer"] = Relationship(back_populates="admin")
     staff: List["Staff"] = Relationship(back_populates="admin")
-    orders: List["Sales"] = Relationship(back_populates="admin")
     rooms: List["Room"] = Relationship(back_populates="admin")
     sales: List["Sales"] = Relationship(back_populates="admin")
     bookings: List["Booking"] = Relationship(back_populates="admin")
     hotel_profile: Optional["HotelProfile"] = Relationship(back_populates="admin", sa_relationship_kwargs={"uselist": False})
     inboxes: List["Inbox"] = Relationship(back_populates="admin")
     blogs: List["Blog"] = Relationship(back_populates="admin")
-    datasets: List["Dataset"] = Relationship(back_populates="admin")
+    # Dataset.admin_id is unique -> this is 1:1, not 1:many
+    dataset: Optional["Dataset"] = Relationship(back_populates="admin", sa_relationship_kwargs={"uselist": False})
     call_logs: List["CallLog"] = Relationship(back_populates="admin")
 
 
@@ -43,26 +42,28 @@ class Product(SQLModel, table=True):
     category: Optional[str] = None
     quantity: Optional[str] = None
     image_url: Optional[str] = None
-    status: str = Field(default="available")  # "available" | "out_of_stock"
+    status: str = Field(default="available")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     admin: Optional["Admin"] = Relationship(back_populates="products")
-    sales: List["Sales"] = Relationship(back_populates="product")
 
 
 class Sales(SQLModel, table=True):
     __tablename__ = "sales"
     id: Optional[int] = Field(default=None, primary_key=True)
-    product_id: int = Field(foreign_key="products.id")
     admin_id: Optional[int] = Field(default=None, foreign_key="admin.id")
-    quantity_sold: int
-    unit_price: str      # snapshot of product.price at time of sale
-    total_amount: str    # unit_price * quantity_sold
+    total_amount: str
+    payment_method: str
+    # products_data is the source of truth for line items -> no singular
+    # product_id/relationship; a sale is a cart of N products, not 1.
+    products_data: List[Any] = Field(
+        default_factory=list, sa_type=JSONB, nullable=False
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    product: Optional[Product] = Relationship(back_populates="sales")
     admin: Optional["Admin"] = Relationship(back_populates="sales")
-    
+
+
 class Room(SQLModel, table=True):
     __tablename__ = "rooms"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -76,21 +77,23 @@ class Room(SQLModel, table=True):
     pictures: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationship back to admin
     admin: Optional[Admin] = Relationship(back_populates="rooms")
-        
+    bookings: List["Booking"] = Relationship(back_populates="room")
+
+
 class Customer(SQLModel, table=True):
     __tablename__ = "customers"
-    
+
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     customer_name: Optional[str] = None
     phone: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     admin_id: int = Field(foreign_key="admin.id")
     admin: Optional[Admin] = Relationship(back_populates="customers")
+
 
 class Staff(SQLModel, table=True):
     __tablename__ = "staff"
@@ -107,16 +110,15 @@ class Staff(SQLModel, table=True):
     jwt_token: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationship back to admin
     admin: Optional[Admin] = Relationship(back_populates="staff")
-    
+    bookings: List["Booking"] = Relationship(back_populates="staff")
 
-    
+
 class Booking(SQLModel, table=True):
     __tablename__ = "bookings"
     id: Optional[int] = Field(default=None, primary_key=True)
     admin_id: Optional[int] = Field(default=None, foreign_key="admin.id")
-    room_id: int = Field(default=None, foreign_key="rooms.id")
+    room_id: Optional[int] = Field(default=None, foreign_key="rooms.id")
     staff_id: Optional[int] = Field(default=None, foreign_key="staff.id")
     room_number: Optional[str] = None
     price: Optional[str] = None
@@ -130,15 +132,16 @@ class Booking(SQLModel, table=True):
     check_in: Optional[str] = None
     check_out: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     admin: Optional[Admin] = Relationship(back_populates="bookings")
-    room: Optional[Room] = Relationship()
-    staff: Optional[Staff] = Relationship()
-                   
+    room: Optional[Room] = Relationship(back_populates="bookings")
+    staff: Optional[Staff] = Relationship(back_populates="bookings")
+
+
 class HotelProfile(SQLModel, table=True):
-    __tablename__ = "hotel_profile"   
+    __tablename__ = "hotel_profile"
     id: Optional[int] = Field(default=None, primary_key=True)
-    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id", unique=True) 
+    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id", unique=True)
     email: str = Field(index=True, unique=True)
     name: Optional[str] = None
     phone: Optional[str] = None
@@ -149,8 +152,9 @@ class HotelProfile(SQLModel, table=True):
     agent_phone: Optional[str] = None
     social_links: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     image_url: Optional[str] = None
-    
+
     admin: Optional["Admin"] = Relationship(back_populates="hotel_profile")
+
 
 class Inbox(SQLModel, table=True):
     __tablename__ = "inbox"
@@ -159,9 +163,10 @@ class Inbox(SQLModel, table=True):
     email: Optional[str] = None
     body: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     admin: Optional[Admin] = Relationship(back_populates="inboxes")
-             
+
+
 class Blog(SQLModel, table=True):
     __tablename__ = "blogs"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -173,14 +178,14 @@ class Blog(SQLModel, table=True):
     video_url: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationship back to admin
     admin: Optional[Admin] = Relationship(back_populates="blogs")
-    
+
+
 class Dataset(SQLModel, table=True):
     __tablename__ = "dataset"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id", unique=True) 
+    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id", unique=True)
     title: str
     description: Optional[str] = None
     intent: Optional[List[Dict[str, Any]]] = Field(
@@ -189,16 +194,38 @@ class Dataset(SQLModel, table=True):
     )
     admin: Optional["Admin"] = Relationship(back_populates="dataset")
 
-    
+
 class CallLog(SQLModel, table=True):
     __tablename__ = "call_logs"
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(index=True)
-    status: str = Field(default="active")  
+    status: str = Field(default="active")
     duration: str
     sentiment: str
     admin_id: int = Field(foreign_key="admin.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    # Relationships
+
     admin: Admin = Relationship(back_populates="call_logs")
+    
+class AttendanceStatus(str, Enum):
+    check_in = "check_in"
+    check_out = "check_out"
+ 
+ 
+class Attendance(SQLModel, table=True):
+    __tablename__ = "attendance"
+ 
+    id: Optional[int] = Field(default=None, primary_key=True)
+    staff_id: int = Field(foreign_key="staff.id", index=True)
+    name: str
+    admin_id: int = Field(foreign_key="admin.id", index=True)
+    status: AttendanceStatus
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+ 
+ 
+class AttendanceRead(SQLModel):
+    id: int
+    staff_id: int
+    status: AttendanceStatus
+    created_at: datetime
+ 

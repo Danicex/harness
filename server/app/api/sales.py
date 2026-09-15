@@ -9,7 +9,7 @@ from app.crud import create_data, update_data, delete_data, get_admin_data, get_
 from app.auth.authentication import isAuthorized
 import json
 
-router = APIRouter(prefix="/sales")
+router = APIRouter(prefix="/sales", tags=["sales"])
 
 
 @router.post('/create_sale')
@@ -18,7 +18,6 @@ def create_sale(
     staff_id: Optional[int] = Form(None),
     payment_method: Optional[str] = Form(None),
     customer_name: Optional[str] = Form(None),
-    total_amount: Optional[int] = Form(None),
     product_data: Optional[str] = Form(None), 
     authorization: str = Header(...)
 ):
@@ -84,11 +83,10 @@ def create_sale(
         sale_dict = {
             "admin_id": auth.get("admin_id"),
             "staff_id": staff_id if staff_id else auth.get("staff_id"),
-            "customer_name": customer_name,  
             "payment_method": payment_method,
-            "total_amount": total_amount,
+            "total_amount": str(total_amount),
             "products_data": products_info, 
-            "created_at": datetime.utcnow()
+            # "created_at": datetime.utcnow()
         }
         
         # Create sale using helper function

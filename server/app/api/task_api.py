@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Form, UploadFile, File, HTTPException
 from celery.result import AsyncResult
 from app.celery_app import celery_app
-from app.tasks import send_mail, send_mail_with_attachment, send_sms, update_room_statuses
+from app.tasks import send_mail, send_mail_with_attachment, send_bulk_sms, update_room_statuses
 from typing import List, Optional
 import base64
 import logging
 
-router = APIRouter(prefix="/task")
+router = APIRouter(prefix="/task", tags=["task api"])
 logger = logging.getLogger(__name__)
 
 @router.get("/get_task_status/{task_id}")
@@ -27,11 +27,13 @@ async def task_status(task_id: str):
         "info": redis_info or {}
     }
 
+
+#add auth header
 @router.post("/send_sms")
 def task_send_sms(
     to: List[str] = Form(..., description="List of phone numbers"),
     body: str = Form(..., description="SMS message body"),
-    sender: Optional[str] = Form(None)
+    # sender: Optional[str] = Form(None)
     
 ):
     """
@@ -45,7 +47,7 @@ def task_send_sms(
             raise HTTPException(status_code=400, detail="No valid phone numbers provided")
         
         # Trigger the Celery task
-        task = send_sms.delay(
+        task = send_bulk_sms.delay(
             to=cleaned_numbers,
             body=body,
             sender=sender

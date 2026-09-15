@@ -9,7 +9,7 @@ from app.auth.authentication import isAuthorized
 from app.services.upload import handle_file_upload
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/product")
+router = APIRouter(prefix="/product", tags=["products"])
 
 class ProductCreate(BaseModel):
     name: str

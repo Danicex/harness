@@ -164,6 +164,7 @@ export default function CreateSale() {
       formData.append('customer_name', customerName || '');
       formData.append('product_data', JSON.stringify(productsData));
 
+      console.log("data is:", formData)
       const res = await api.post("/sales/create_sale", formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
