@@ -5,7 +5,7 @@
 server/.env
 server/myenv/
 server/uploads/
-
+harness_asset
 # Root or general environment variables
 .env
 *.env
