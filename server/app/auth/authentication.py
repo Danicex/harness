@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from app.crud import create_data, update_data, get_single_data
-from app.model import Admin, Staff
+from app.model import Admin, Staff, AdminCredentials
 from typing import Optional, Dict, Any
 import os
 from passlib.context import CryptContext
@@ -47,6 +47,14 @@ class TokenResponse(BaseModel):
     admin_id: Optional[int] = None  # Make optional
     staff_id: Optional[int] = None 
 
+def get_admin_cred(token):
+    auth = isAuthorized(token)
+    admin_id = auth.get("admin_id")
+    with Session(engine) as session:
+        credentials = session.exec(
+                select(AdminCredentials).where(Admin.id == admin_id)
+            ).first()
+    return credentials
 
 # login admin
 @router.post('/login', response_model=TokenResponse)

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact — Vista Suites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Red+Hat+Display:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink: '#202631', mist: '#d9d9d9' },
+    fontFamily: { display: ['"Poiret One"', '"Josefin Sans"', 'sans-serif'], body: ['"Red Hat Display"', 'system-ui', 'sans-serif'] }
+  } } };
+</script>
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body class="bg-[#13171d] text-white">
+<div id="site-header"></div>
+
+<main>
+  <section class="relative h-[58vh] min-h-[400px] overflow-hidden flex items-end">
+    <div class="absolute inset-x-0 top-[-15%] h-[130%]" data-parallax=".15">
+      <img class="kb h-full w-full object-cover" alt="" data-seed="contact-hero" src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=2000&q=75">
+    </div>
+    <div class="absolute inset-0 bg-gradient-to-t from-ink/85 to-ink/40"></div>
+    <div class="relative mx-auto w-full max-w-7xl px-6 pb-12">
+      <h1 class="display leading-[.92] text-white" style="font-size:clamp(3rem,10vw,8rem)">
+        <span class="rise"><span style="--d:.2s">Contact</span></span>
+      </h1>
+      <p class="mt-4 text-white/85 max-w-md" data-reveal="fade" style="--d:900ms">Questions, group rates, or a change to an existing booking — reach us here.</p>
+    </div>
+  </section>
+
+  <section class="bg-[#13171d] border-b border-white/25">
+    <div class="mx-auto max-w-7xl px-6 py-16 md:py-20 grid gap-16 lg:grid-cols-2">
+      <div data-stagger>
+        <h2 class="display mb-10 text-white" style="font-size:clamp(2rem,5.5vw,3.2rem)" data-reveal>Get in touch</h2>
+        <div class="space-y-8 text-white/90">
+          <div>
+            <h3 class="text-sm uppercase tracking-wide text-white/60 mb-2">Location</h3>
+            <p>123 Skyline Avenue, Grand City ST 12345</p>
+          </div>
+          <div>
+            <h3 class="text-sm uppercase tracking-wide text-white/60 mb-2">Phone &amp; email</h3>
+            <p><a class="hover:text-white/70" href="tel:+12345670890">+1 (234) 567-890</a><br><a class="hover:text-white/70" href="mailto:hello@vistasuites.com">hello@vistasuites.com</a></p>
+          </div>
+          <div>
+            <h3 class="text-sm uppercase tracking-wide text-white/60 mb-2">Business hours</h3>
+            <ul class="space-y-1">
+              <li>Monday: 8am – 7pm</li><li>Tuesday: 8am – 5pm</li><li>Wednesday: 8am – 5pm</li><li>Thursday: 8am – 7pm</li><li>Friday: 8am – 5pm</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mt-10 overflow-hidden border border-white/25 aspect-[4/3]">
+          <img class="h-full w-full object-cover" loading="lazy" alt="View of Grand City skyline near the hotel" data-seed="contact-map" src="https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=1200&q=75">
+        </div>
+      </div>
+
+      <div>
+        <h2 class="display mb-10 text-white" style="font-size:clamp(2rem,5.5vw,3.2rem)" data-reveal>Send a message</h2>
+        <form id="contactForm" class="grid gap-5" data-stagger>
+          <label class="block">
+            <span class="block text-xs uppercase tracking-wide text-white/70 mb-2">Full name</span>
+            <input required name="name" type="text" placeholder="Jordan Blake" class="w-full bg-white/10 border border-white/25 px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-white">
+          </label>
+          <label class="block">
+            <span class="block text-xs uppercase tracking-wide text-white/70 mb-2">Email</span>
+            <input required name="email" type="email" placeholder="you@email.com" class="w-full bg-white/10 border border-white/25 px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-white">
+          </label>
+          <label class="block">
+            <span class="block text-xs uppercase tracking-wide text-white/70 mb-2">Subject</span>
+            <select name="subject" class="w-full bg-white/10 border border-white/25 px-4 py-3 text-white focus:outline-none focus:border-white">
+              <option class="text-ink">General enquiry</option>
+              <option class="text-ink">Existing booking</option>
+              <option class="text-ink">Group or event rates</option>
+              <option class="text-ink">Feedback</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="block text-xs uppercase tracking-wide text-white/70 mb-2">Message</span>
+            <textarea required name="message" rows="5" placeholder="How can we help?" class="w-full bg-white/10 border border-white/25 px-4 py-3 text-white placeholder-white/40 focus:outline-none focus:border-white resize-none"></textarea>
+          </label>
+          <div>
+            <button type="submit" class="inline-flex items-center gap-3 bg-white text-ink px-7 py-4 text-xs font-bold uppercase tracking-wider transition hover:bg-white/85">
+              Send message
+              <svg class="arrow w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 12h16M14 6l6 6-6 6"/></svg>
+            </button>
+            <p id="contactStatus" class="mt-4 text-sm text-white/75" aria-live="polite"></p>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script>
+/* ============================================================
+   CONTACT FORM: posts to CONTACT_API_URL. If it fails or isn't
+   wired up, fall back to a friendly local confirmation and point
+   to a direct email/phone so the person isn't left stuck.
+   ============================================================ */
+const CONTACT_API_URL = 'https://api.example.com/v1/contact';
+document.getElementById('contactForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const status = document.getElementById('contactStatus');
+  const data = Object.fromEntries(new FormData(form).entries());
+  status.textContent = 'Sending…';
+  try {
+    const res = await fetch(CONTACT_API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    status.textContent = `Thanks, ${data.name.split(' ')[0]} — your message is on its way. We'll reply within a day.`;
+    form.reset();
+  } catch (err) {
+    console.warn('Contact API unavailable:', err.message);
+    status.textContent = `Thanks, ${data.name.split(' ')[0]} — we couldn't reach our contact system just now. Please email hello@vistasuites.com or call +1 (234) 567-890 and we'll take it from there.`;
+  }
+});
+</script>
+</body>
+</html>

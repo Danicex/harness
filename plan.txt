@@ -1,6 +1,9 @@
 inventory deduction ✅
 staff check-in check-out ✅
+group side nav ✅
 assign task to staff  ✅ 
-sms / mail messaging - user per sender id. 
+hotel website template ✅ 
+payment / currency 
 chat bot / assistant 
-payment / laguage / currency
+deploy
+sms / mail messaging - user per sender id. ✅ 

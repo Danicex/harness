@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gallery — Vista Suites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Red+Hat+Display:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink: '#202631', mist: '#d9d9d9' },
+    fontFamily: { display: ['"Poiret One"', '"Josefin Sans"', 'sans-serif'], body: ['"Red Hat Display"', 'system-ui', 'sans-serif'] }
+  } } };
+</script>
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body class="bg-[#13171d] text-white">
+<div id="site-header"></div>
+
+<main>
+  <section class="relative h-[58vh] min-h-[400px] overflow-hidden flex items-end">
+    <div class="absolute inset-x-0 top-[-15%] h-[130%]" data-parallax=".15">
+      <img class="kb h-full w-full object-cover" alt="" data-seed="gallery-hero" src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=2000&q=75">
+    </div>
+    <div class="absolute inset-0 bg-gradient-to-t from-ink/85 to-ink/40"></div>
+    <div class="relative mx-auto w-full max-w-7xl px-6 pb-12">
+      <h1 class="display leading-[.92] text-white" style="font-size:clamp(3rem,10vw,8rem)">
+        <span class="rise"><span style="--d:.2s">Gallery</span></span>
+      </h1>
+      <p class="mt-4 text-white/85 max-w-md" data-reveal="fade" style="--d:900ms">A closer look at the rooms, the light and the small details.</p>
+    </div>
+  </section>
+
+  <section class="bg-[#13171d]">
+    <div class="mx-auto max-w-7xl px-6 py-16 md:py-20">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 sm:[grid-auto-rows:220px]">
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden sm:row-span-2" data-full="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=1800&q=80" data-caption="Luxury Room, king bed" data-reveal style="--d:0ms">
+        <img class="h-full w-full object-cover aspect-[4/3] sm:aspect-auto sm:h-full transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Luxury Room, king bed" data-seed="gal-0" src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Luxury Room, king bed</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1800&q=80" data-caption="Premier Suite interior" data-reveal style="--d:90ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Premier Suite interior" data-seed="gal-1" src="https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Premier Suite interior</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1800&q=80" data-caption="Rooftop lounge at dusk" data-reveal style="--d:180ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Rooftop lounge at dusk" data-seed="gal-2" src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Rooftop lounge at dusk</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1800&q=80" data-caption="Restaurant breakfast spread" data-reveal style="--d:270ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Restaurant breakfast spread" data-seed="gal-3" src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Restaurant breakfast spread</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=1800&q=80" data-caption="Reception and concierge desk" data-reveal style="--d:360ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Reception and concierge desk" data-seed="gal-4" src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Reception and concierge desk</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden sm:row-span-2" data-full="https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1800&q=80" data-caption="Marble bathroom and soaking tub" data-reveal style="--d:450ms">
+        <img class="h-full w-full object-cover aspect-[4/3] sm:aspect-auto sm:h-full transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Marble bathroom and soaking tub" data-seed="gal-5" src="https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Marble bathroom and soaking tub</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1560185007-cde436f6a4d0?auto=format&fit=crop&w=1800&q=80" data-caption="Dining table by the window" data-reveal style="--d:0ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Dining table by the window" data-seed="gal-6" src="https://images.unsplash.com/photo-1560185007-cde436f6a4d0?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Dining table by the window</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1800&q=80" data-caption="City-view balcony at night" data-reveal style="--d:90ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="City-view balcony at night" data-seed="gal-7" src="https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">City-view balcony at night</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1800&q=80" data-caption="Penthouse Suite living space" data-reveal style="--d:180ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Penthouse Suite living space" data-seed="gal-8" src="https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Penthouse Suite living space</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1800&q=80" data-caption="Executive Suite bedroom" data-reveal style="--d:270ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Executive Suite bedroom" data-seed="gal-9" src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Executive Suite bedroom</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden sm:row-span-2" data-full="https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1800&q=80" data-caption="Skyline view from a corner suite" data-reveal style="--d:360ms">
+        <img class="h-full w-full object-cover aspect-[4/3] sm:aspect-auto sm:h-full transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Skyline view from a corner suite" data-seed="gal-10" src="https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Skyline view from a corner suite</span>
+      </button>
+      <button type="button" class="gallery-item group relative block w-full overflow-hidden " data-full="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1800&q=80" data-caption="Studio Suite in daylight" data-reveal style="--d:450ms">
+        <img class="h-full w-full object-cover aspect-[4/3]  transition duration-[1100ms] group-hover:scale-110" loading="lazy" alt="Studio Suite in daylight" data-seed="gal-11" src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=900&q=75">
+        <span class="absolute inset-0 bg-[#13171d]/0 transition duration-500 group-hover:bg-[#13171d]/30"></span>
+        <span class="absolute inset-x-0 bottom-0 p-4 text-xs uppercase tracking-wide text-white opacity-0 translate-y-2 transition duration-400 group-hover:opacity-100 group-hover:translate-y-0">Studio Suite in daylight</span>
+      </button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="site-footer"></footer>
+
+<!-- Lightbox -->
+<div id="lightbox" class="fixed inset-0 z-[65] bg-black/92 opacity-0 pointer-events-none transition duration-300 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Photo viewer">
+  <button id="lbClose" aria-label="Close" class="absolute top-6 right-6 text-white text-sm tracking-wider uppercase">Close ✕</button>
+  <button id="lbPrev" aria-label="Previous photo" class="absolute left-3 md:left-8 top-1/2 -translate-y-1/2 grid place-items-center w-11 h-11 rounded-full border border-white/50 text-white transition hover:bg-white/10">
+    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 6l-6 6 6 6"/></svg>
+  </button>
+  <button id="lbNext" aria-label="Next photo" class="absolute right-3 md:right-8 top-1/2 -translate-y-1/2 grid place-items-center w-11 h-11 rounded-full border border-white/50 text-white transition hover:bg-white/10">
+    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg>
+  </button>
+  <figure class="max-w-5xl w-full">
+    <img id="lbImage" src="" alt="" class="w-full max-h-[75vh] object-contain">
+    <figcaption id="lbCaption" class="mt-4 text-center text-sm text-white/80"></figcaption>
+  </figure>
+</div>
+
+<script>
+  const items = [...document.querySelectorAll('.gallery-item')];
+  const lb = document.getElementById('lightbox');
+  const lbImage = document.getElementById('lbImage');
+  const lbCaption = document.getElementById('lbCaption');
+  let idx = 0;
+  function show(i) {
+    idx = (i + items.length) % items.length;
+    const it = items[idx];
+    lbImage.src = it.dataset.full;
+    lbImage.alt = it.dataset.caption;
+    lbCaption.textContent = it.dataset.caption;
+  }
+  function open(i) { show(i); lb.classList.remove('opacity-0','pointer-events-none'); }
+  function close() { lb.classList.add('opacity-0','pointer-events-none'); }
+  items.forEach((it, i) => it.addEventListener('click', () => open(i)));
+  document.getElementById('lbClose').addEventListener('click', close);
+  document.getElementById('lbPrev').addEventListener('click', () => show(idx - 1));
+  document.getElementById('lbNext').addEventListener('click', () => show(idx + 1));
+  lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (lb.classList.contains('opacity-0')) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowLeft') show(idx - 1);
+    if (e.key === 'ArrowRight') show(idx + 1);
+  });
+</script>
+</body>
+</html>

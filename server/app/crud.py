@@ -2,7 +2,7 @@ from typing import Optional
 from app.database import SessionDep
 from sqlmodel import select, and_, desc, func
 from sqlalchemy.sql import extract
-from app.model import Admin, Product, HotelProfile, Sales, Staff, Booking, Customer, Inbox, Blog, Dataset, CallLog, Room, HotelProfile, Attendance
+from app.model import Admin, Product, HotelProfile, Sales, Staff, Booking, Customer, Inbox, Blog, Dataset, CallLog, Room, HotelProfile, Attendance, Task
 from datetime import datetime, timedelta
 
 obj_map = {
@@ -20,6 +20,7 @@ obj_map = {
     "room": Room,
     "call_log": CallLog,
     "dataset": Dataset,
+    "task": Task,
 }
 
 def read_data(obj_name: str, session: SessionDep, limit: int = 100):

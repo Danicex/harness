@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vista Suites — Luxury Business Hotel, Grand City</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poiret+One&family=Red+Hat+Display:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink: '#202631', mist: '#d9d9d9' },
+    fontFamily: { display: ['"Poiret One"', '"Josefin Sans"', 'sans-serif'], body: ['"Red Hat Display"', 'system-ui', 'sans-serif'] }
+  } } };
+</script>
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main>
+  <!-- HERO -->
+  <section class="relative min-h-screen overflow-hidden flex items-end">
+    <div class="absolute inset-x-0 top-[-15%] h-[130%]" data-parallax=".15">
+      <img class="kb h-full w-full object-cover" alt="" data-seed="vista-hero"
+           src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=2000&q=75">
+    </div>
+    <div class="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/35 to-ink/50"></div>
+
+    <div class="relative w-full max-w-7xl mx-auto px-6 pb-14 pt-52">
+      <p class="mb-6 text-sm tracking-wide text-white/90" data-reveal="fade" style="--d:900ms">Luxury Business Hotel</p>
+      <div class="flex flex-col gap-10 md:flex-row md:items-end md:justify-between">
+        <h1 class="display leading-[.9] text-white
+        " style="font-size:clamp(4.5rem,19vw,15rem)">
+          <span class="rise"><span style="--d:.2s">Vista</span></span>
+          <span class="rise"><span style="--d:.45s">Suites</span></span>
+        </h1>
+        <a href="booking.html" class="inline-flex items-center gap-3 self-start md:self-end md:mb-6 text-sm font-bold tracking-wider uppercase text-white" data-reveal="fade" style="--d:1.1s">
+          Book your stay
+          <svg class="arrow w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 12h16M14 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- VIDEO -->
+  <section class="bg-[#13171d] px-4 md:px-8 pt-8 pb-16">
+    <div class="relative overflow-hidden border border-white/30 aspect-[4/5] sm:aspect-[16/10] lg:aspect-[16/8]">
+      <img class="absolute inset-0 h-full w-full object-cover" alt="" data-seed="vista-video" loading="lazy"
+           src="https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=2000&q=75">
+      <div class="absolute inset-0 bg-[#13171d]/60"></div>
+
+      <button id="playBtn" aria-label="Play welcome video"
+              class="pulse absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 grid place-items-center w-20 h-20 md:w-24 md:h-24 rounded-full bg-white/25 backdrop-blur-sm transition hover:bg-white/40 hover:scale-105">
+        <svg class="w-8 h-8 ml-1" viewBox="0 0 24 24" fill="#fff"><path d="M6 4l14 8-14 8z"/></svg>
+      </button>
+
+      <p class="absolute left-6 md:left-12 bottom-8 md:bottom-12 font-display leading-[1.02] text-white" style="font-size:clamp(2.2rem,6.4vw,5.6rem);-webkit-text-stroke:.5px #fff">
+        <span class="block" data-reveal style="--d:0ms">Urban escape.</span>
+        <span class="block" data-reveal style="--d:200ms">Breathtaking views.</span>
+        <span class="block" data-reveal style="--d:400ms">Welcome to Vista Suites.</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- HEADLINE + INTRO -->
+  <section class="bg-[#13171d] text-white">
+    <div class="mx-auto max-w-7xl px-6 py-16 md:py-24">
+      <h2 class="display leading-[.95] text-white" style="font-size:clamp(2.6rem,8vw,6.5rem)" data-reveal>
+        Luxury suites<br>for people<br>on the go
+      </h2>
+    </div>
+  </section>
+
+  <section class="bg-[#13171d] border-y border-white/25">
+    <div class="mx-auto max-w-7xl px-6 py-16 grid gap-8 md:grid-cols-2 md:gap-16 text-[15px] leading-relaxed text-white/90" data-stagger>
+      <p>Vista Suites is built for the traveller who never quite stops moving. Every suite pairs a skyline view with a proper desk, blackout-dark sleep and fast, dependable Wi-Fi, so the working day and the evening's rest both get the room they need.</p>
+      <p>We sit in the middle of Grand City's business district, a few minutes from the conference centre, the central station and the best dining downtown.</p>
+    </div>
+  </section>
+
+  <!-- AMENITIES -->
+  <section class="bg-[#13171d]">
+    <div class="mx-auto max-w-7xl px-6 pt-16 pb-24">
+      <h2 class="display mb-14 text-white" style="font-size:clamp(2.6rem,8vw,6.5rem)" data-reveal>Amenities</h2>
+      <div class="grid gap-6 md:grid-cols-3" data-stagger>
+        <article class="group border border-white/40 transition duration-500 hover:border-white hover:-translate-y-2">
+          <div class="overflow-hidden aspect-[4/2.6]"><img class="h-full w-full object-cover transition duration-[1200ms] group-hover:scale-110" loading="lazy" alt="Reception desk" data-seed="concierge" src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=900&q=75"></div>
+          <div class="p-6 pb-10"><h3 class="text-xl mb-3">24/7 Concierge</h3><p class="text-sm text-white/80">Restaurant tables, car service and last-minute tickets, at any hour.</p></div>
+        </article>
+        <article class="group border border-white/40 transition duration-500 hover:border-white hover:-translate-y-2">
+          <div class="overflow-hidden aspect-[4/2.6]"><img class="h-full w-full object-cover transition duration-[1200ms] group-hover:scale-110" loading="lazy" alt="Rooftop lounge" data-seed="rooftop" src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=900&q=75"></div>
+          <div class="p-6 pb-10"><h3 class="text-xl mb-3">Rooftop Lounge</h3><p class="text-sm text-white/80">Signature cocktails and open sky above the city lights.</p></div>
+        </article>
+        <article class="group border border-white/40 transition duration-500 hover:border-white hover:-translate-y-2">
+          <div class="overflow-hidden aspect-[4/2.6]"><img class="h-full w-full object-cover transition duration-[1200ms] group-hover:scale-110" loading="lazy" alt="Breakfast at the restaurant" data-seed="restaurant" src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=900&q=75"></div>
+          <div class="p-6 pb-10"><h3 class="text-xl mb-3">Restaurant</h3><p class="text-sm text-white/80">Seasonal breakfasts, working lunches and late-night plates.</p></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- AWARDS -->
+  <section class="bg-[#13171d]">
+    <div class="mx-auto max-w-7xl px-6 pb-28 text-white">
+      <h2 class="display mb-14 text-white" style="font-size:clamp(2.6rem,8vw,6.5rem)" data-reveal>Awards</h2>
+      <div class="grid gap-5 md:grid-cols-6" data-stagger>
+        <div class="md:col-span-2 border border-white/40 p-6 py-8 transition hover:bg-white/5"><p class="font-bold mb-5">Excellence in Guest Service</p><p class="text-xs uppercase text-white/70">Hospitality Awards 2026</p></div>
+        <div class="md:col-span-2 border border-white/40 p-6 py-8 transition hover:bg-white/5"><p class="font-bold mb-5">Ranked #3</p><p class="text-xs uppercase text-white/70">City Guide's Top 50 Hotels 2026</p></div>
+        <div class="md:col-span-2 border border-white/40 p-6 py-8 transition hover:bg-white/5"><p class="font-bold mb-5">Best Urban Retreat</p><p class="text-xs uppercase text-white/70">City Travel Awards</p></div>
+        <div class="md:col-span-2 md:col-start-2 border border-white/40 p-6 py-8 transition hover:bg-white/5"><p class="font-bold mb-5">Traveler's Choice<br>for City Escape</p><p class="text-xs uppercase text-white/70">Global Getaway Awards 2026</p></div>
+        <div class="md:col-span-2 border border-white/40 p-6 py-8 transition hover:bg-white/5"><p class="font-bold mb-5">Top Boutique<br>Hotel Experience</p><p class="text-xs uppercase text-white/70">Travel Magazine 2026</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="bg-[#13171d] border-t border-white/25">
+    <div class="mx-auto max-w-7xl px-6 py-24 flex flex-col gap-10 md:flex-row md:items-end md:justify-between">
+      <h2 class="display leading-[.95] text-white" style="font-size:clamp(2.6rem,7vw,5.5rem)" data-reveal>See it for<br>yourself</h2>
+      <div class="md:max-w-sm text-white/85" data-reveal style="--d:150ms">
+        <p class="leading-relaxed mb-8">Browse the rooms, look through the gallery, or reach the front desk directly — whatever gets you here faster.</p>
+        <div class="flex flex-wrap gap-3">
+          <a href="booking.html" class="inline-flex items-center gap-3 border border-white px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition hover:bg-white hover:text-ink">Book a room</a>
+          <a href="gallery.html" class="inline-flex items-center gap-3 border border-white/40 px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition hover:border-white">View gallery</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="site-footer"></footer>
+
+<!-- 
+<div id="videoModal" class="fixed inset-0 z-[60] bg-black/90 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Welcome video">
+  <div class="panel relative w-full max-w-4xl">
+    <button id="closeVideo" class="absolute -top-10 right-0 text-sm tracking-wider uppercase" aria-label="Close video">Close ✕</button>
+   Replace the src below with your own hotel film 
+    <video id="welcomeVideo" class="w-full aspect-video bg-black" controls playsinline preload="none"
+           src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"></video>
+    <p id="videoError" class="hidden mt-4 text-center text-sm text-white/70">The video couldn't load. Check the video URL in index.html and try again.</p>
+  </div>
+</div>
+ -->
+
+<script>
+  const modal = document.getElementById('videoModal');
+  const video = document.getElementById('welcomeVideo');
+  const err = document.getElementById('videoError');
+  const openV = () => { modal.classList.add('open'); err.classList.add('hidden'); video.play().catch(() => {}); };
+  const closeV = () => { modal.classList.remove('open'); video.pause(); };
+  document.getElementById('playBtn').addEventListener('click', openV);
+  document.getElementById('closeVideo').addEventListener('click', closeV);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeV(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeV(); });
+  video.addEventListener('error', () => err.classList.remove('hidden'));
+</script>
+</body>
+</html>

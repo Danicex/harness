@@ -57,7 +57,13 @@ const TaskManagement = lazy(() => import("./TaskManagement"))
 // wall-mounted screen/tablet at the entrance, so it should live on its own
 // standalone route (e.g. /kiosk/attendance) outside the login-gated app shell.
 
-// Tabs every role sees, appended after their role-specific tabs.
+/* ------------------------------------------------------------------ */
+/*  Navigation                                                        */
+/* ------------------------------------------------------------------ */
+// Nav is a list of SECTIONS. A section with a `label` renders a small heading
+// above its items; a section without one is ungrouped (no heading).
+
+// Every role sees these, appended after their role-specific sections.
 // reg_attendant (self check-in scanner) lives here, not per-role, since
 // every employee — regardless of role — needs to be able to check themselves in.
 const COMMON_TABS = [
@@ -65,44 +71,105 @@ const COMMON_TABS = [
   { id: 'chatbot', label: 'Chatbot', icon: BotMessageSquare },
 ]
 
-// Tabs unique to each role. Roles not listed here fall back to DEFAULT_ROLE_TABS.
-const ROLE_TABS = {
-  admin: [
-    { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'attendance', label: 'Attendance', icon: Check },
-    { id: 'room', label: 'Rooms', icon: Hotel },
-    { id: 'inventory', label: 'Inventory', icon: Package },
-    { id: 'bookings', label: 'Bookings', icon: BookCheck },
-    { id: 'sales', label: 'Sales', icon: CircleDollarSign },
-    { id: 'customers', label: 'Customers', icon: Group },
-    { id: 'staff', label: 'Staff', icon: Users },
-    { id: 'task', label: 'Task Management', icon: ListTodo  },
-    { id: 'inbox', label: 'Inbox', icon: Mail },
-    { id: 'blog', label: 'Blog', icon: FileText },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ],
-  receptionist: [
-    { id: 'bookings', label: 'Bookings', icon: BookCheck },
-    { id: 'profile', label: 'Profile', icon: User },
+const ADMIN_NAV = [
+  { items: [{ id: 'home', label: 'Dashboard', icon: LayoutDashboard }] },
+  {
+    label: 'Operations',
+    items: [
+      { id: 'room', label: 'Rooms', icon: Hotel },
+      { id: 'inventory', label: 'Inventory', icon: Package },
+    ],
+  },
+  {
+    label: 'Revenue',
+    items: [
+      { id: 'sales', label: 'Sales', icon: CircleDollarSign },
+      { id: 'bookings', label: 'Bookings', icon: BookCheck },
+    ],
+  },
+  {
+    label: 'Team',
+    items: [
+      { id: 'staff', label: 'Staff', icon: Users },
+      { id: 'attendance', label: 'Attendance', icon: Check },
+      { id: 'task', label: 'Task Management', icon: ListTodo },
+    ],
+  },
+  {
+    label: 'Engagement',
+    items: [
+      { id: 'customers', label: 'Customers', icon: Group },
+      { id: 'inbox', label: 'Inbox', icon: Mail },
+      { id: 'blog', label: 'Blog', icon: FileText },
+    ],
+  },
+  { items: [{ id: 'settings', label: 'Settings', icon: Settings }] }, // ungrouped
+]
 
+// Sections unique to each role. Roles not listed here fall back to DEFAULT_ROLE_NAV.
+const ROLE_NAV = {
+  admin: ADMIN_NAV,
+  manager: ADMIN_NAV, // manager sees the same tabs as admin
+  receptionist: [
+    {
+      items: [
+        { id: 'bookings', label: 'Bookings', icon: BookCheck },
+        { id: 'profile', label: 'Profile', icon: User },
+      ],
+    },
   ],
   sales_attendant: [
-    { id: 'sales', label: 'Sales', icon: CircleDollarSign },
-    { id: 'profile', label: 'Profile', icon: User },
+    {
+      items: [
+        { id: 'sales', label: 'Sales', icon: CircleDollarSign },
+        { id: 'profile', label: 'Profile', icon: User },
+      ],
+    },
   ],
 }
-// manager sees the same tabs as admin
-ROLE_TABS.manager = ROLE_TABS.admin
 
 // Roles with no role-specific tabs of their own still get COMMON_TABS
 // (which includes Register Attendance) via the ?? fallback below.
-const DEFAULT_ROLE_TABS = []
+const DEFAULT_ROLE_NAV = []
 
 // Which tab a role should land on when they first open the dashboard.
 // Roles not listed here keep whatever tab is already active (default: "home").
 const DEFAULT_TAB_BY_ROLE = {
   receptionist: 'bookings',
   sales_attendant: 'sales',
+}
+
+// One nav list, used by both the desktop sidebar and the mobile drawer.
+function NavList({ sections, activeTab, onSelect }) {
+  return (
+    <nav className="flex flex-col gap-5 overflow-y-auto">
+      {sections.map((section, i) => (
+        <div
+          key={section.label ?? `section-${i}`}
+          // ungrouped sections after the first get a divider so they read as separate
+          className={`grid gap-1 ${!section.label && i > 0 ? "border-t pt-4" : ""}`}
+        >
+          {section.label && (
+            <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{section.label}</p>
+          )}
+          {section.items.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <Button
+                key={tab.id}
+                variant="ghost"
+                className={`justify-start gap-2 px-2 ${activeTab === tab.id ? "bg-secondary text-secondary-foreground" : "bg-none"}`}
+                onClick={() => onSelect(tab.id)}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </Button>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  )
 }
 
 export default function Dashboard() {
@@ -124,13 +191,16 @@ export default function Dashboard() {
   }, []);
 
   // Pure derivation of the visible nav — no side effects, safe in useMemo.
-  const tabs = useMemo(() => {
-    const roleTabs = ROLE_TABS[user_role] ?? DEFAULT_ROLE_TABS;
-    if(user_role == "admin"){
-      return [...roleTabs];
+  const navSections = useMemo(() => {
+    const roleSections = ROLE_NAV[user_role] ?? DEFAULT_ROLE_NAV;
+    if (user_role === "admin") {
+      return roleSections;
     }
-     return [...roleTabs, ...COMMON_TABS];
+    return [...roleSections, { items: COMMON_TABS }];
   }, [user_role]);
+
+  // Flat list of every visible tab (used for the header title lookup).
+  const tabs = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
 
   // Side effect (changing the active tab on role load) lives in its own
   // effect instead of inside useMemo.
@@ -187,9 +257,9 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex min-h-screen w-[100dvw] overflow-hidden">
+    <div className="flex min-h-screen w-[98dvw] overflow-hidden">
       {/* Sidebar */}
-      <div className={`hidden w-300px flex-col border-r bg-background p-6 md:flex ${!sidebarOpen ? 'hidden' : ''}`}>
+      <div className={`hidden w-300px flex-col border-r bg-background p-4 md:flex ${!sidebarOpen ? 'hidden' : ''}`}>
         <div className="flex items-center gap-2 font-semibold text-lg mb-8">
           <div className="flex lg:flex-1 items-center">
             {theme === 'dark' ? (
@@ -200,22 +270,7 @@ export default function Dashboard() {
             <span className='px-3 font-bold' id='text'>Harness</span>
           </div>
         </div>
-        <nav className="grid gap-2 overflow-y-auto">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <Button
-                key={tab.id}
-                variant="ghost"
-                className={`justify-start gap-2 px-2 ${activeTab === tab.id ? "bg-secondary text-secondary-foreground" : "bg-none"}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </Button>
-            );
-          })}
-        </nav>
+        <NavList sections={navSections} activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
       {/* Mobile nav */}
@@ -231,25 +286,14 @@ export default function Dashboard() {
               <span className='px-3 font-bold' id='text'>Harness</span>
             </div>
           </div>
-          <nav className="grid gap-2 overflow-y-auto">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <Button
-                  key={tab.id}
-                  variant="ghost"
-                  className={`justify-start gap-2 px-2 ${activeTab === tab.id ? "bg-secondary text-secondary-foreground" : "bg-none"}`}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setSidebarOpen(false);
-                  }}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </Button>
-              );
-            })}
-          </nav>
+          <NavList
+            sections={navSections}
+            activeTab={activeTab}
+            onSelect={(id) => {
+              setActiveTab(id);
+              setSidebarOpen(false);
+            }}
+          />
         </div>
       )}
 
@@ -279,7 +323,7 @@ export default function Dashboard() {
             <ThemeToggle />
           </div>
         </header>
-        <main className="relative pt-6 px-6 h-[90dvh] w-full overflow-x-scroll" onClick={() => setSidebarOpen(false)}>
+        <main className="relative pt-6 px-6 h-[90dvh] w-full " onClick={() => setSidebarOpen(false)}>
           <Suspense fallback={<PageSpinner />}>
             {renderTabContent()}
           </Suspense>

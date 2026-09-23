@@ -1,6 +1,6 @@
 fastapi[standard]
 uvicorn[standard]==0.30.0
-sqlalchemy==2.0.35
+sqlalchemy
 pydantic>=2.10.0
 sqlmodel>=0.0.22
 dotenv
@@ -17,3 +17,4 @@ twilio
 requests
 openai
 africastalking
+load_dotenv

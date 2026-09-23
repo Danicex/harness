@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship, JSON, Column
-from datetime import datetime, date
+from datetime import date, datetime, time
 from typing import Optional, List, Dict, Any
 from sqlalchemy.dialects.postgresql import JSONB
 from decimal import Decimal, InvalidOperation
@@ -30,7 +30,30 @@ class Admin(SQLModel, table=True):
     # Dataset.admin_id is unique -> this is 1:1, not 1:many
     dataset: Optional["Dataset"] = Relationship(back_populates="admin", sa_relationship_kwargs={"uselist": False})
     call_logs: List["CallLog"] = Relationship(back_populates="admin")
+    tasks: List["Task"] = Relationship(
+        back_populates="admin",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    credentials: Optional["AdminCredentials"] = Relationship(
+        back_populates="admin", 
+        sa_relationship_kwargs={"uselist": False}
+    )
+    
+class AdminCredentials(SQLModel, table=True):
+    __tablename__ = "admin_credentials"
 
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_id: int = Field(foreign_key="admin.id", unique=True)  # <- was missing entirely
+    agent_phone: Optional[str] = None
+    african_talking_api_key: Optional[str] = None
+    domain_name: Optional[str] = None
+    resend_api_key: Optional[str] = None
+    verified_domain: bool = Field(default=False)
+
+    admin: Optional["Admin"] = Relationship(
+        back_populates="credentials",
+        sa_relationship_kwargs={"uselist": False},
+    )
 
 class Product(SQLModel, table=True):
     __tablename__ = "products"
@@ -206,26 +229,96 @@ class CallLog(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     admin: Admin = Relationship(back_populates="call_logs")
-    
+
+
 class AttendanceStatus(str, Enum):
     check_in = "check_in"
     check_out = "check_out"
- 
- 
+
+
 class Attendance(SQLModel, table=True):
     __tablename__ = "attendance"
- 
+
     id: Optional[int] = Field(default=None, primary_key=True)
     staff_id: int = Field(foreign_key="staff.id", index=True)
     name: str
     admin_id: int = Field(foreign_key="admin.id", index=True)
     status: AttendanceStatus
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
- 
- 
+
+
 class AttendanceRead(SQLModel):
     id: int
     staff_id: int
     status: AttendanceStatus
     created_at: datetime
- 
+
+
+# ---------- Task enums ----------
+class TaskPriority(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class TaskStatus(str, Enum):
+    pending = "pending"
+    in_progress = "in progress"  # value matches what the React UI sends/expects
+    completed = "completed"
+
+
+# ---------- Task DB table ----------
+class Task(SQLModel, table=True):
+    __tablename__ = "task"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    admin_id: int = Field(foreign_key="admin.id", index=True)
+
+    task_title: str = Field(max_length=200)
+    description: Optional[str] = None
+    department: str = Field(index=True)
+    assigned_staff: dict = Field(
+        default_factory=dict, 
+        sa_column=Column(JSONB, nullable=False, default={})
+    )
+
+    # stored as plain strings (validated by the enums in the request schemas below)
+    # so you avoid native Postgres ENUM types and painful migrations
+    priority: str = Field(default="medium", index=True)
+    status: str = Field(default="pending", index=True)
+
+    due_date: date = Field(index=True)
+    due_time: Optional[time] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Must match Admin.tasks (back_populates="admin" <-> back_populates="tasks")
+    admin: Optional["Admin"] = Relationship(back_populates="tasks")
+
+
+# ---------- Task request schemas (not tables) ----------
+class TaskCreate(SQLModel):
+    model_config = {"use_enum_values": True}  # model_dump() returns plain strings, safe for the DB
+
+    task_title: str
+    description: Optional[str] = None
+    department: str
+    assigned_staff: str
+    priority: TaskPriority = TaskPriority.medium
+    status: TaskStatus = TaskStatus.pending
+    due_date: date
+    due_time: Optional[time] = None
+
+
+class TaskUpdate(SQLModel):
+    model_config = {"use_enum_values": True}
+
+    task_title: Optional[str] = None
+    description: Optional[str] = None
+    department: Optional[str] = None
+    assigned_staff: Optional[str] = None
+    priority: Optional[TaskPriority] = None
+    status: Optional[TaskStatus] = None
+    due_date: Optional[date] = None
+    due_time: Optional[time] = None

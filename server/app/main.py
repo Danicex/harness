@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import create_db_and_tables
-from app.api import product, staff, blog, call_log, dataset, inbox, rooms, customer, sales, booking,  hotel_profile, analytics, task_api, chatbot, attendance
+from app.api import product, staff, blog, call_log, dataset, inbox, rooms, customer, sales, booking,  hotel_profile, analytics, task_api, chatbot, attendance, task_management
 from app.auth import authentication
 import os
 from app.tasks import update_room_statuses
@@ -46,6 +46,7 @@ async def test_ws(websocket: WebSocket):
     await websocket.close()  
     
 app.include_router(chatbot.router)
+app.include_router(task_management.router)
 app.include_router(product.router)
 app.include_router(task_api.router)
 app.include_router(sales.router)
