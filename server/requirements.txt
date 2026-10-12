@@ -7,12 +7,12 @@ dotenv
 redis
 resend
 psycopg2-binary
+psycopg
 passlib[bcrypt]
 python-jose[cryptography]
 bcrypt<4.1.0
 apscheduler
 celery 
-redis
 twilio
 requests
 openai

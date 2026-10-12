@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship, JSON, Column
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy.dialects.postgresql import JSONB
 from decimal import Decimal, InvalidOperation
@@ -15,8 +15,8 @@ class Admin(SQLModel, table=True):
     jwt_token: Optional[str] = None
     reset_password_token: Optional[str] = None
     reset_password_expiry: Optional[datetime] = None
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     products: List["Product"] = Relationship(back_populates="admin")
     customers: List["Customer"] = Relationship(back_populates="admin")
