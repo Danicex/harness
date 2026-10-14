@@ -13,3 +13,7 @@ redis_client = redis.Redis(
     db=int(0),
     decode_responses=True
 )
+
+
+
+
