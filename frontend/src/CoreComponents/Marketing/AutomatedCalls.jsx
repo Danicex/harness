@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { CreateDatasetForm } from './Dataset';
+import { CreateDatasetForm } from '../Chatbot/Dataset';
 import {
   Table,
   TableBody,

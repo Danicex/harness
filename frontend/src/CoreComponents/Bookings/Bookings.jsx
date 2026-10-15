@@ -55,8 +55,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { printReceipt } from './PrintReceipt'; 
-import Receipt from './ReceiptTemplate'; 
+import { printReceipt } from '../Receipts/PrintReceipt'; 
+import Receipt from '../Receipts/ReceiptTemplate'; 
 
 
 // Utilities & Hooks

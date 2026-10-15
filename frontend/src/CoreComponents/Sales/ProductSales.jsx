@@ -84,8 +84,8 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { printReceipt } from './PrintReceipt'; 
-import Receipt from './ReceiptTemplate'; 
+import { printReceipt } from '../Receipts/PrintReceipt'; 
+import Receipt from '../Receipts/ReceiptTemplate'; 
 import api from '@/lib/api';
 
 

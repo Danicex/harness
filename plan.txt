@@ -4,6 +4,6 @@ group side nav ✅
 assign task to staff  ✅ 
 hotel website template ✅ 
 payment / currency 
-chat bot / assistant 
+chat bot / assistant ✅ 
 deploy
-sms / mail messaging - user per sender id. ✅ 
+sms / mail messaging - user per sender id.  

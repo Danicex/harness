@@ -17,40 +17,41 @@ import {
   Group,
   BookCheck,
   CircleDollarSign,
-  History,
+  History, Database,
   Check, ListTodo
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import logo from '../assets/963c7620-ebc1-427c-b9c2-009612cfa83b.png';
-import logo2 from '../assets/9afc9890-5863-44a2-9c58-42eebfc842f4.png';
+import logo from '../../assets/963c7620-ebc1-427c-b9c2-009612cfa83b.png';
+import logo2 from '../../assets/9afc9890-5863-44a2-9c58-42eebfc842f4.png';
 import { useMyContext } from "@/Context/AppContext"
 import ThemeToggle from "@/components/ThemeToggle"
 import PageSpinner from "@/components/PageSpinner"
-import api from "@/lib/api"
+import api from "@/lib/api";
 
 // Lazy-loaded tab panels. Each tab's code is only downloaded the first time
 // the user actually opens it — paired with <Suspense fallback={<PageSpinner />}>
 // below so the rest of the dashboard (sidebar, header) stays interactive
 // while a panel's chunk is loading.
 
-const RenderAnalytics = lazy(() => import("./RenderAnalytics"))
-const Room = lazy(() => import("./Room"))
-const Inventory = lazy(() => import("./Inventory"))
-const AutomatedCalls = lazy(() => import("./AutomatedCalls"))
-const CampaignsPage = lazy(() => import("./Champagne"))
-const CustomerList = lazy(() => import("./CustomerList"))
-const CampaignHistory = lazy(() => import("./CampaignHistory"))
-const BookingList = lazy(() => import("./Bookings"))
-const SalesList = lazy(() => import("./ProductSales"))
-const Staff = lazy(() => import("./Staff"))
-const Inbox = lazy(() => import("./Inbox"))
-const Blog = lazy(() => import("./Blog"))
+const RenderAnalytics = lazy(() => import("../Analytics/RenderAnalytics"))
+const Room = lazy(() => import("../Bookings/Room"))
+const Inventory = lazy(() => import("../Sales/Inventory"))
+const AutomatedCalls = lazy(() => import("../Marketing/AutomatedCalls"))
+const CampaignsPage = lazy(() => import("../Marketing/Champagne"))
+const CustomerList = lazy(() => import("../Customers/CustomerList"))
+const CampaignHistory = lazy(() => import("../Marketing/CampaignHistory"))
+const BookingList = lazy(() => import("../Bookings/Bookings"))
+const SalesList = lazy(() => import("../Sales/ProductSales"))
+const Staff = lazy(() => import("../Staff/Staff"))
+const Inbox = lazy(() => import("../Messaging/Inbox"))
+const Blog = lazy(() => import("../Marketing/Blog"))
 const Setting = lazy(() => import("./Setting"))
-const Chatbot = lazy(() => import("./Chatbot"))
-const AttendanceDisplay = lazy(() => import("./AttendanceDisplay"))
+const Chatbot = lazy(() => import("../Chatbot/Chatbot"))
+const AttendanceDisplay = lazy(() => import("../Staff/AttendanceDisplay"))
 const AttendanceScanner = lazy(() => import("@/staff_endpoint/AttendantScanner"))
 const ProfilePage = lazy(() => import("@/staff_endpoint/StaffProfile"))
-const TaskManagement = lazy(() => import("./TaskManagement"))
+const TaskManagement = lazy(() => import("../Staff/TaskManagement"))
+const ChatBotWrapper = lazy(() => import("../Chatbot/ChatBotWrapper"))
 
 // NOTE: AttendanceDisplay (the rotating-QR kiosk screen) is intentionally NOT
 // wired into this authenticated dashboard. It's meant to run unattended on a
@@ -85,6 +86,12 @@ const ADMIN_NAV = [
     items: [
       { id: 'sales', label: 'Sales', icon: CircleDollarSign },
       { id: 'bookings', label: 'Bookings', icon: BookCheck },
+    ],
+  },
+  {
+    label: 'chatbot',
+    items: [
+      { id: 'chatbot_wrapper', label: 'ChatBot / Dataset', icon: Database  },
     ],
   },
   {
@@ -225,6 +232,7 @@ export default function Dashboard() {
     Campaign: CampaignsPage,
     inbox: Inbox,
     chatbot: Chatbot,
+    chatbot_wrapper: ChatBotWrapper,
     blog: Blog,
     profile: ProfilePage,
     attendance: AttendanceDisplay,

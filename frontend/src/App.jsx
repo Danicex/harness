@@ -3,7 +3,7 @@ import { Routes, Route } from "react-router-dom"
 import './App.css'
 
 import { AppDataProvider } from "./Context/AppContext"
-import './CoreComponents/AllStyles.css'
+import './CoreComponents/Styles/AllStyles.css'
 import ProtectedRoute from "./ProtectedRoute"
 import NotFound from "./NotFound"
 import PageSpinner from "./components/PageSpinner"
@@ -12,13 +12,13 @@ import PageSpinner from "./components/PageSpinner"
 // user actually navigates there, instead of all being bundled into the
 // initial page load. <Suspense fallback={<PageSpinner />}> below shows a
 // spinner while a chunk is in flight.
-const Dashboard = lazy(() => import("./CoreComponents/Dashboard"))
+const Dashboard = lazy(() => import("./CoreComponents/Dashboard/Dashboard"))
 const About = lazy(() => import("./About"))
 const HotelProfileForm = lazy(() => import("./Auth/Profile"))
 const Login = lazy(() => import("./Auth/Login"))
 const Subscribe = lazy(() => import("./Auth/Subscribe"))
-const InboxPage = lazy(() => import("./CoreComponents/CreateInbox"))
-const HTMLTextEditor = lazy(() => import("./CoreComponents/TextEditor"))
+const InboxPage = lazy(() => import("./CoreComponents/Messaging/CreateInbox"))
+const HTMLTextEditor = lazy(() => import("./CoreComponents/Marketing/TextEditor"))
 const Contact = lazy(() => import("./Contact"))
 
 // Named exports need a small adapter so React.lazy (which expects a

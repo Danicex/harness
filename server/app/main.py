@@ -13,14 +13,14 @@ UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
-allowed_url = os.getenv("ALLOWED_URL")
-
 app = FastAPI()
 
-origins = [
-    "http://localhost:5173"
-]
+allowed_url = os.environ.get("ALLOWED_URL", "https://harness.encheiron.com")
 
+origins = [
+    allowed_url
+]
+    
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
