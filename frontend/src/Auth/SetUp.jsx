@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { useNavigate } from "react-router-dom"
 import { UploadCloud} from "lucide-react"
 import PaystackBtn from "./Payment"
+import { currency } from "@/lib/currency"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -284,7 +285,7 @@ export default function SetUp() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold">{service.name}</h3>
-                        <Badge variant="secondary">${service.price}</Badge>
+                        <Badge variant="secondary">{currency} {service.price}</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">{service.description}</p>
                       <div className="flex flex-wrap gap-2">
@@ -349,7 +350,7 @@ export default function SetUp() {
                 (
                   <div className="flex justify-between items-center">
                     <span className="text-sm">{i.name}</span>
-                    <span className="font-medium">${i.price}</span>
+                    <span className="font-medium">{currency} {i.price}</span>
                   </div>
                 ))}
 
@@ -358,7 +359,7 @@ export default function SetUp() {
 
                 <div className="flex justify-between items-center text-lg font-bold">
                   <span>Total</span>
-                  <span>${totalPrice}</span>
+                  <span>{currency} {totalPrice}</span>
                 </div>
               </div>
 

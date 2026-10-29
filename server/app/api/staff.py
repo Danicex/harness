@@ -1,17 +1,42 @@
 # CRUD staff
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Depends
 from fastapi import status as http_status
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import Staff
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized,  hash_password, create_jwt_token
+from app.auth.authentication import AuthUser, MIN_PASSWORD_LENGTH, hash_password, require_admin, require_staff
 from app.services.upload import handle_file_upload
+from sqlalchemy import update as sql_update
 from sqlmodel import select
 
 
 router = APIRouter(prefix="/staff", tags=["staff"])
+
+# never sent to any client
+_SECRET_FIELDS = {"password", "prev_password", "jwt_token"}
+
+
+def _public(staff) -> dict:
+    return staff.model_dump(exclude=_SECRET_FIELDS)
+
+
+def _clean_role(role: Optional[str]) -> Optional[str]:
+    """Job role, normalised.  "admin" is reserved for the Admin table."""
+    if role is None:
+        return None
+    role = role.strip().lower()
+    if role == "admin":
+        raise HTTPException(status_code=400, detail='"admin" is not a valid staff role')
+    return role or None
+
+
+def _check_password(password: str) -> None:
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+        )
 
 @router.post('/create_staff')
 async def create_staff(
@@ -23,18 +48,14 @@ async def create_staff(
     role: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     cv: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)  
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
+    role = _clean_role(role)
+    _check_password(password)
+
     try:
         hashed_password = hash_password(password)
-        jwt_token = create_jwt_token(email, role)
         # Handle file uploads
         image_url = None
         if image:
@@ -50,13 +71,12 @@ async def create_staff(
             "name": name,
             "email": email,
             "password": hashed_password,
-            "prev_password": password,
-            "jwt_token": jwt_token,
+            "prev_password": hashed_password, 
             "bio": bio,
             "role": role,
             "image_url": image_url,
             "cv_url": cv_url,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
 
         success, staff = create_data("staff", staff_dict, session)
@@ -67,7 +87,7 @@ async def create_staff(
                 detail="Failed to create staff"
             )
 
-        return {"message": "Staff created successfully", "staff": staff}
+        return {"message": "Staff created successfully", "staff": _public(staff)}
     except HTTPException:
         raise
     except Exception as e:
@@ -80,14 +100,8 @@ async def create_staff(
 @router.get("/get_staff")
 def read_staff(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         staff_list = get_admin_data(auth["admin_id"], "staff", session)
@@ -95,7 +109,7 @@ def read_staff(
         if not staff_list:
             return {"message": "No staff found", "staff": []}
 
-        return  staff_list
+        return staff_list
     except HTTPException:
         raise
     except Exception as e:
@@ -109,14 +123,7 @@ def read_staff(
 # def get_single_staff(
 #     session: SessionDep,
 #     staff_id: int,
-#     authorization: str = Header(...)
 # ):
-#     token = authorization.split(" ")[1]
-#     auth = isAuthorized(token)
-#     if not auth:
-#         raise HTTPException(status_code=401, detail="Not authorized")
-#     if auth.get("role") != "admin":
-#         raise HTTPException(status_code=401, detail="Not authorized")
 
 #     try:
 #         staff = get_single_data(staff_id, "staff", session)
@@ -148,14 +155,8 @@ async def update_staff(
     role: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     cv: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Get existing staff
@@ -176,22 +177,21 @@ async def update_staff(
         # Prepare update dict (only include fields that are provided)
         staff_dict = {}
 
-        hashed_password = hash_password(password)
-        
-        # Generate JWT
-        jwt_token = create_jwt_token(email, role)
+        role = _clean_role(role)
         if name is not None:
             staff_dict["name"] = name
         if email is not None:
             staff_dict["email"] = email
         if password is not None:
+            _check_password(password)
+            hashed_password = hash_password(password)
             staff_dict["password"] = hashed_password
             staff_dict["prev_password"] = password
+          
         if bio is not None:
             staff_dict["bio"] = bio
         if role is not None:
-            staff_dict["role"] = role
-            staff_dict["jwt_token"] = jwt_token
+            staff_dict["role"] = role  # read from the DB on every request, no re-login needed
 
         # Handle file uploads if new files provided
         if image:
@@ -211,7 +211,13 @@ async def update_staff(
                 detail="Failed to update staff"
             )
 
-        return {"message": "Staff updated successfully", "staff": updated_staff}
+        result = _public(updated_staff)
+        if password is not None:
+            # password changed: sign the staff member out of any existing session
+            session.exec(sql_update(Staff).where(Staff.id == staff_id).values(jwt_token=None))
+            session.commit()
+
+        return {"message": "Staff updated successfully", "staff": result}
 
     except HTTPException:
         raise
@@ -226,14 +232,8 @@ async def update_staff(
 def delete_staff(
     session: SessionDep,
     staff_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Get existing staff
@@ -273,23 +273,9 @@ def delete_staff(
 @router.get('/profile')
 def staff_profile(
     session: SessionDep,
-    authorization: str = Header(...)
-    
-    ):
-    
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
- 
-    try:
-        result = get_single_data(auth["staff_id"], "staff", session)
-        
-        return result
-    
-    except Exception as e:
-        print(f"Error getting profile: {e}")
-        return False
-        
-        
-        
+    auth: AuthUser = Depends(require_staff),
+):
+    staff = get_single_data(auth["staff_id"], "staff", session)
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    return _public(staff)

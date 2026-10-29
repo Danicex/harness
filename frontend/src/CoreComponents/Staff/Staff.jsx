@@ -39,6 +39,7 @@ export default function Staff() {
       .then((res) => {
         if (Array.isArray(res.data)) {
           setStaffData(res.data);
+          console.log(res.data)
         } else {
           setStaffData([]);
         }

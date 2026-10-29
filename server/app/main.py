@@ -2,11 +2,14 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import create_db_and_tables
-from app.api import product, staff, blog, call_log, dataset, inbox, rooms, customer, sales, booking,  hotel_profile, analytics, task_api, chatbot, attendance, task_management
+from app.api import product, staff, blog, call_log, dataset, inbox, rooms, customer, sales, booking,  hotel_profile, analytics, task_api,  chatbot, attendance, task_management, admin_panel, subscription
 from app.auth import authentication
 import os
-from app.tasks import update_room_statuses
+from app.task.tasks import update_room_statuses
 from app.api import task_api
+from fastapi.exceptions import RequestValidationError
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 
 UPLOAD_DIR = "uploads"
@@ -45,6 +48,11 @@ async def test_ws(websocket: WebSocket):
     await websocket.send_text("hello")
     await websocket.close()  
     
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    print("VALIDATION ERROR:", exc.errors())
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+   
 app.include_router(chatbot.router)
 app.include_router(task_management.router)
 app.include_router(product.router)
@@ -62,6 +70,8 @@ app.include_router(blog.router)
 app.include_router(analytics.router)
 app.include_router(authentication.router)
 app.include_router(attendance.router)
+app.include_router(admin_panel.router)
+app.include_router(subscription.router)
 
 @app.get("/run-task")
 def run_task():

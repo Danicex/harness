@@ -1,11 +1,11 @@
 # CRUD customer
-from fastapi import APIRouter, HTTPException, status, Header, Form, UploadFile, File
+from fastapi import APIRouter, HTTPException, status, Form, UploadFile, File, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import Customer
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, require_admin
 import csv
 import io
 
@@ -17,14 +17,8 @@ def create_customer(
     customer_name: str = Form(...),
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         customer_dict = {
@@ -55,14 +49,8 @@ def create_customer(
 @router.get("/get_customers")
 def read_customers(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         customers = get_admin_data(auth["admin_id"], "customer", session)
@@ -84,14 +72,8 @@ def read_customers(
 def get_single_customer(
     session: SessionDep,
     customer_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         customer = get_single_data(customer_id, "customer", session)
@@ -119,14 +101,8 @@ def update_customer(
     customer_name: str = Form(...),
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Get existing customer
@@ -155,7 +131,7 @@ def update_customer(
             customer_dict["phone"] = phone
      
 
-        customer_dict["updated_at"] = datetime.utcnow()
+        customer_dict["updated_at"] = datetime.now(timezone.utc)
 
         # Update customer using CRUD function
         success, updated_customer = update_data("customer", customer_id, customer_dict, session)
@@ -180,17 +156,8 @@ def update_customer(
 async def bulk_upload_customers(
     session: SessionDep,
     file: UploadFile = File(...),
-    # authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin),
 ):
-    # token = authorization.split(" ")[1]
-    # auth = isAuthorized(token)
-    # if not auth:
-    #     raise HTTPException(status_code=401, detail="Not authorized")
-    # if auth.get("role") != "admin":
-    #     raise HTTPException(status_code=401, detail="Not authorized")
-    auth = {
-        "admin_id": 2
-    }
     try:
         # Read CSV file
         contents = await file.read()
@@ -241,14 +208,8 @@ async def bulk_upload_customers(
 def delete_customer(
     session: SessionDep,
     customer_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Get existing customer

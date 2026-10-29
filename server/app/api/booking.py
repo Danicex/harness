@@ -1,13 +1,13 @@
 # CRUD booking
-from fastapi import APIRouter, HTTPException, Header, Form, status
+from fastapi import APIRouter, HTTPException, Form, status, Depends
 from fastapi import status as http_status
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from sqlmodel import select
 from app.model import Customer, Room
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data, get_data_by_period
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_current_user, require_admin
 from app.services.mailer import send_mail
 import random
 import string
@@ -112,12 +112,8 @@ async def create_booking(
     payment_method: Optional[str] = Form(None),
     check_in: Optional[str] = Form(None),
     check_out: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     res_id = generate_reserve()
 
     try:
@@ -136,7 +132,7 @@ async def create_booking(
             "payment_method": payment_method,
             "check_in": check_in,
             "check_out": check_out,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
 
         existing_customer = session.exec(select(Customer).where(Customer.email == customer_email)).first()
@@ -221,7 +217,7 @@ async def create_customer_booking(
             "payment_method": payment_method,
             "check_in": check_in,
             "check_out": check_out,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
 
         existing_customer = session.exec(select(Customer).where(Customer.email == customer_email)).first()
@@ -261,12 +257,8 @@ async def create_customer_booking(
 @router.get("/get_bookings")
 def read_bookings(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
    
 
     try:
@@ -289,12 +281,8 @@ def read_bookings(
 def get_single_booking(
     session: SessionDep,
     booking_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
 
     try:
@@ -321,12 +309,8 @@ async def get_booking_period(
 session: SessionDep,
    month: str = None,
    date: str = None,
-   authorization: str = Header(...)
+   auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     staff_id = auth.get("staff_id")
     if month: 
         result = get_data_by_period(
@@ -362,12 +346,8 @@ def update_booking(
     payment_method: Optional[str] = Form(None),
     check_in: Optional[str] = Form(None),
     check_out: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
 
     try:
@@ -439,17 +419,8 @@ def update_booking(
 def delete_booking(
     session: SessionDep,
     booking_id: int,
-    # authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin),
 ):
-    # token = authorization.split(" ")[1]
-    # auth = isAuthorized(token)
-    # if not auth:
-    #     raise HTTPException(status_code=401, detail="Not authorized")
-    # if auth.get("role") != "admin":
-    #     raise HTTPException(status_code=401, detail="Not authorized")
-    auth = {
-        "admin_id": 1
-    }
     try:
         # Get existing booking
         existing_booking = get_single_data(booking_id, "booking", session)

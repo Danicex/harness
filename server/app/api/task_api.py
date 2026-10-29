@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Form, UploadFile, File, Header, HTTPException
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException
 from celery.result import AsyncResult
 from app.celery_app import celery_app
-from app.tasks import send_mail, send_mail_with_attachment, send_bulk_sms, update_room_statuses
+from app.task.tasks import send_mail, send_mail_with_attachment, send_bulk_sms, update_room_statuses
 from typing import List, Optional
 import base64
 import logging
-from app.auth.authentication import isAuthorized, get_admin_cred
+from app.auth.authentication import AuthUser, get_admin_cred, require_admin
+from app.database import SessionDep
 router = APIRouter(prefix="/task", tags=["task api"])
 logger = logging.getLogger(__name__)
 
@@ -31,19 +32,14 @@ async def task_status(task_id: str):
 #add auth header
 @router.post("/send_sms")
 def task_send_sms(
+    session: SessionDep,
     to: List[str] = Form(..., description="List of phone numbers"),
     body: str = Form(..., description="SMS message body"),
-    authorization: str = Header(...)    
+    auth: AuthUser = Depends(require_admin),
 ):
     """
     Send SMS messages to one or more recipients
     """
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Clean phone numbers (remove whitespace)
@@ -51,14 +47,16 @@ def task_send_sms(
         
         if not cleaned_numbers:
             raise HTTPException(status_code=400, detail="No valid phone numbers provided")
-        credentials = get_admin_cred(token)
+        credentials = get_admin_cred(auth["admin_id"], session)
         # Trigger the Celery task
+        
+
         task = send_bulk_sms.delay(
             to=cleaned_numbers,
             body=body,
-            sender=sender,
-            api_key = credentials.african_talk_api_key,
-            agent_phone = credentials.agent_phone
+            sender=credentials.at_sender_id,
+            api_key = credentials.aat_api_key,
+            agent_phone = credentials.at_voice_number
         )
         
         return {
@@ -74,38 +72,32 @@ def task_send_sms(
 
 @router.post("/send_mail")
 def task_send_mail(
+    session: SessionDep,
     to: str= Form(..., description="Email recipient(s) - comma separated for multiple"),
     subject: str = Form(..., description="Email subject"),
     html: str = Form(..., description="HTML content of the email"),
     from_email: Optional[str] = Form(None, description="Sender email (default: Acme <noreply@encheiron.com>)"),
-    authorization: str = Header(...)    
+    auth: AuthUser = Depends(require_admin),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Parse comma-separated emails into list
         recipients = [email.strip() for email in to.split(',') if email.strip()]
-        
+        # admin_id = 1
         if not recipients:
             raise HTTPException(status_code=400, detail="No valid email addresses provided")
-        credentials = get_admin_cred(token)
+        # credentials = get_admin_cred(admin_id, session)
+        credentials = get_admin_cred(auth["admin_id"], session)
         # Use default sender if not provided
-        if not from_email:
-            domain = credentials.domain
-            from_email = f"Acme <noreply@{domain}>"
+        
         
         # Trigger the Celery task
         task = send_mail.delay(
+            auth,
             to=recipients if len(recipients) > 1 else recipients[0],
             subject=subject,
-            html=html,
-            agent_email=from_email,
-            api_key = credentials.resend_api_key,     
+            html=html,   
+            from_email=from_email
         )
         
         return {
@@ -126,7 +118,8 @@ async def send_attachment_mail(
     html: str = Form(..., description="HTML content of the email"),
     file: UploadFile = File(..., description="File to attach (PDF recommended)"),
     filename: Optional[str] = Form(None, description="Custom filename (default: original filename)"),
-    from_email: Optional[str] = Form(None, description="Sender email (default: Acme <noreply@encheiron.com>)")
+    from_email: Optional[str] = Form(None, description="Sender email (default: Acme <noreply@encheiron.com>)"),
+    auth: AuthUser = Depends(require_admin),
 ):
     """
     Send an email with a file attachment
@@ -184,7 +177,7 @@ async def send_attachment_mail(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/update_room_statuses")
-def trigger_room_status_update():
+def trigger_room_status_update(auth: AuthUser = Depends(require_admin)):
     """
     Trigger the room status update task
     """
@@ -201,7 +194,7 @@ def trigger_room_status_update():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/cancel_task/{task_id}")
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, auth: AuthUser = Depends(require_admin)):
     """
     Cancel a running Celery task
     """
@@ -230,7 +223,8 @@ async def cancel_task(task_id: str):
 def bulk_send_sms(
     recipients: List[str] = Form(..., description="List of phone numbers"),
     message: str = Form(..., description="SMS message body"),
-    sender: str = Form(..., description="Sender ID or phone number")
+    sender: str = Form(..., description="Sender ID or phone number"),
+    auth: AuthUser = Depends(require_admin),
 ):
     """
     Send bulk SMS to multiple recipients

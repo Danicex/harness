@@ -1,11 +1,11 @@
 # CRUD dataset
-from fastapi import APIRouter, HTTPException, status, Header, Form
+from fastapi import APIRouter, HTTPException, status, Form, Depends
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.database import SessionDep
 from app.model import Dataset
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_admin_data_single, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_current_user, require_admin
 import json
 router = APIRouter(prefix="/dataset", tags=["dataset"])
 
@@ -15,14 +15,8 @@ async def create_dataset(
     title: str = Form(...),  
     description: Optional[str] = Form(None),  
     intent: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         intent_data = json.loads(intent) if intent else []
@@ -54,12 +48,8 @@ async def create_dataset(
 @router.get("/get_dataset")
 def read_dataset(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         dataset = get_admin_data_single(auth["admin_id"], "dataset", session)
@@ -85,14 +75,8 @@ async def update_dataset(
     title: Optional[str] = None,
     description: Optional[str] = None,
     intent: Optional[List[Dict[str, Any]]] = None,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         existing_dataset = get_admin_data_single(auth["admin_id"], "dataset", session)
@@ -142,14 +126,8 @@ async def update_dataset(
 @router.delete('/delete_dataset')
 def delete_dataset(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         existing_dataset = get_admin_data_single(auth["admin_id"], "dataset", session)

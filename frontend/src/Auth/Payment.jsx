@@ -1,5 +1,6 @@
 import { useMyContext } from "@/Context/AppContext";
 import { PaystackButton } from "react-paystack";
+import { currency } from "@/lib/currency";
 
 const PaystackBtn = ({ email, amount, name, phone, handlePost, handleCancel }) => {
   // ✅ Environment variables in Vite must start with VITE_
@@ -10,7 +11,7 @@ const PaystackBtn = ({ email, amount, name, phone, handlePost, handleCancel }) =
 
   const componentProps = {
     email,
-    currency: 'USD', 
+    currency,
     amount: amountInKobo,
     metadata: {
       name,

@@ -3,7 +3,18 @@ staff check-in check-out ✅
 group side nav ✅
 assign task to staff  ✅ 
 hotel website template ✅ 
-payment / currency 
-chat bot / assistant ✅ 
-deploy
-sms / mail messaging - user per sender id.  
+payment / currency  ✅
+deploy ✅ 
+sms / email  
+admin panel ✅
+staff blog / inbox / task ✅
+chat bot ✅
+subscription ✅
+
+testing
+-------------------------------------------------------
+
+
+
+
+

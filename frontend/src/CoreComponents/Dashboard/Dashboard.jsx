@@ -49,26 +49,14 @@ const Setting = lazy(() => import("./Setting"))
 const Chatbot = lazy(() => import("../Chatbot/Chatbot"))
 const AttendanceDisplay = lazy(() => import("../Staff/AttendanceDisplay"))
 const AttendanceScanner = lazy(() => import("@/staff_endpoint/AttendantScanner"))
+const AllWrapper = lazy(() => import("@/staff_endpoint/allWrapper"))
 const ProfilePage = lazy(() => import("@/staff_endpoint/StaffProfile"))
 const TaskManagement = lazy(() => import("../Staff/TaskManagement"))
 const ChatBotWrapper = lazy(() => import("../Chatbot/ChatBotWrapper"))
 
-// NOTE: AttendanceDisplay (the rotating-QR kiosk screen) is intentionally NOT
-// wired into this authenticated dashboard. It's meant to run unattended on a
-// wall-mounted screen/tablet at the entrance, so it should live on its own
-// standalone route (e.g. /kiosk/attendance) outside the login-gated app shell.
 
-/* ------------------------------------------------------------------ */
-/*  Navigation                                                        */
-/* ------------------------------------------------------------------ */
-// Nav is a list of SECTIONS. A section with a `label` renders a small heading
-// above its items; a section without one is ungrouped (no heading).
-
-// Every role sees these, appended after their role-specific sections.
-// reg_attendant (self check-in scanner) lives here, not per-role, since
-// every employee — regardless of role — needs to be able to check themselves in.
 const COMMON_TABS = [
-  { id: 'reg_attendant', label: 'Register Attendance', icon: User },
+  { id: 'staff_app', label: 'Your tab', icon: User },
   { id: 'chatbot', label: 'Chatbot', icon: BotMessageSquare },
 ]
 
@@ -235,9 +223,10 @@ export default function Dashboard() {
     chatbot_wrapper: ChatBotWrapper,
     blog: Blog,
     profile: ProfilePage,
-    attendance: AttendanceDisplay,
+    staff_app: AllWrapper,
     automated_calls: AutomatedCalls,
     settings: Setting,
+    attendance: AttendanceDisplay,
     task: TaskManagement,
   }), []);
 
@@ -331,7 +320,7 @@ export default function Dashboard() {
             <ThemeToggle />
           </div>
         </header>
-        <main className="relative pt-6 px-6 h-[90dvh] w-full " onClick={() => setSidebarOpen(false)}>
+        <main className="relative pt-6 px-6 h-[90dvh] w-full overflow-y-scroll" onClick={() => setSidebarOpen(false)}>
           <Suspense fallback={<PageSpinner />}>
             {renderTabContent()}
           </Suspense>

@@ -16,12 +16,12 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
-
+  const inputRef = useRef(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function send(e) {
+   async function send(e) {
     e.preventDefault();
     const text = input.trim();
     if (!text || loading) return;
@@ -31,15 +31,20 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const data = await api("/chatbot/chat", {
-        method: "POST",
-        body: { admin_id: getAdminId(), user_input: text },
+      const { data } = await api.post("/chatbot/chat", {
+        admin_id: getAdminId(),
+        user_input: text,
       });
       setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
     } catch (err) {
-      setMessages((m) => [...m, { role: "assistant", text: `Sorry, something went wrong: ${err.message}` }]);
+      const detail = err?.response?.data?.detail;
+      const msg = Array.isArray(detail)
+        ? detail.map((d) => `${d.loc?.slice(1).join(".")}: ${d.msg}`).join("; ")
+        : detail || err?.message || "Unknown error";
+      setMessages((m) => [...m, { role: "assistant", text: `Sorry, something went wrong: ${msg}` }]);
     } finally {
       setLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 0); // wait for the input to re-enable
     }
   }
 
@@ -69,11 +74,12 @@ export default function ChatPage() {
 
           <form onSubmit={send} className="flex gap-2">
             <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about rooms, prices, amenities…"
-              disabled={loading}
-            />
+  ref={inputRef}
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  placeholder="Ask about rooms, prices, amenities…"
+  disabled={loading}
+/>
             <Button type="submit" size="icon" disabled={loading || !input.trim()}>
               <Send className="h-4 w-4" />
             </Button>

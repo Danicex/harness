@@ -1,9 +1,11 @@
-from sqlmodel import SQLModel, Field, Relationship, JSON, Column
+from sqlmodel import SQLModel, Field, Relationship, JSON, Column, Text
 from datetime import date, datetime, time, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy.dialects.postgresql import JSONB
 from decimal import Decimal, InvalidOperation
 from enum import Enum
+import json
+from pydantic import BaseModel, field_validator
 
 class Admin(SQLModel, table=True):
     __tablename__ = "admin"
@@ -15,6 +17,7 @@ class Admin(SQLModel, table=True):
     jwt_token: Optional[str] = None
     reset_password_token: Optional[str] = None
     reset_password_expiry: Optional[datetime] = None
+    account_status: str = Field(default="active")
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -28,7 +31,7 @@ class Admin(SQLModel, table=True):
     inboxes: List["Inbox"] = Relationship(back_populates="admin")
     blogs: List["Blog"] = Relationship(back_populates="admin")
     # Dataset.admin_id is unique -> this is 1:1, not 1:many
-    dataset: Optional["Dataset"] = Relationship(back_populates="admin", sa_relationship_kwargs={"uselist": False})
+    datasets: List["Dataset"] = Relationship(back_populates="admin")
     call_logs: List["CallLog"] = Relationship(back_populates="admin")
     tasks: List["Task"] = Relationship(
         back_populates="admin",
@@ -38,22 +41,47 @@ class Admin(SQLModel, table=True):
         back_populates="admin", 
         sa_relationship_kwargs={"uselist": False}
     )
-    
+   
+
 class AdminCredentials(SQLModel, table=True):
     __tablename__ = "admin_credentials"
-
+ 
     id: Optional[int] = Field(default=None, primary_key=True)
-    admin_id: int = Field(foreign_key="admin.id", unique=True)  # <- was missing entirely
-    agent_phone: Optional[str] = None
-    african_talking_api_key: Optional[str] = None
-    domain_name: Optional[str] = None
+    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id", unique=True)
+    domain: Optional[str] = None
+ 
+    # --- Email (Resend) ---
     resend_api_key: Optional[str] = None
-    verified_domain: bool = Field(default=False)
+    resend_from_email: Optional[str] = None
+    resend_from_name: Optional[str] = None
+    resend_reply_to: Optional[str] = None
+ 
+    # --- SMS (BulkSMS Nigeria) ---
+    api_token: Optional[str] = None
+    sender_id: Optional[str] = None
+ 
+    # --- Subscription (Paystack) ---
+    # active | non-renewing | attention | cancelled | completed  (Paystack's own values)
+    subscription_status: Optional[str] = Field(default=None, index=True)
+    subscription_plan_code: Optional[str] = None
+    subscription_plan_type: Optional[str] = None  # monthly | quarterly | annual
+    subscription_started_at: Optional[datetime] = None
+    subscription_expires_at: Optional[datetime] = None  # paid-through date
+    subscription_manage_link: Optional[str] = None
+ 
+    paystack_customer_code: Optional[str] = Field(default=None, index=True)
+    paystack_customer_email: Optional[str] = Field(default=None, index=True)
+    paystack_subscription_code: Optional[str] = Field(default=None, index=True)
+    paystack_email_token: Optional[str] = None
+ 
+    last_payment_reference: Optional[str] = None
+    last_payment_at: Optional[datetime] = None
+ 
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+ 
+    admin: Optional["Admin"] = Relationship(back_populates="credentials")
 
-    admin: Optional["Admin"] = Relationship(
-        back_populates="credentials",
-        sa_relationship_kwargs={"uselist": False},
-    )
+ 
 
 class Product(SQLModel, table=True):
     __tablename__ = "products"
@@ -66,7 +94,10 @@ class Product(SQLModel, table=True):
     quantity: Optional[str] = None
     image_url: Optional[str] = None
     status: str = Field(default="available")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Optional["Admin"] = Relationship(back_populates="products")
 
@@ -82,7 +113,10 @@ class Sales(SQLModel, table=True):
     products_data: List[Any] = Field(
         default_factory=list, sa_type=JSONB, nullable=False
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Optional["Admin"] = Relationship(back_populates="sales")
 
@@ -98,7 +132,10 @@ class Room(SQLModel, table=True):
     status: Optional[str] = None
     image_url: Optional[str] = None
     pictures: Optional[dict] = Field(default=None, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Optional[Admin] = Relationship(back_populates="rooms")
     bookings: List["Booking"] = Relationship(back_populates="room")
@@ -111,8 +148,14 @@ class Customer(SQLModel, table=True):
     email: str = Field(index=True, unique=True)
     customer_name: Optional[str] = None
     phone: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin_id: int = Field(foreign_key="admin.id")
     admin: Optional[Admin] = Relationship(back_populates="customers")
@@ -131,7 +174,15 @@ class Staff(SQLModel, table=True):
     password: str
     prev_password: str
     jwt_token: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    
+    # created_at: datetime = Field(
+    #     default_factory=lambda: datetime.now(timezone.utc),
+    #     nullable=False
+    # )
 
     admin: Optional[Admin] = Relationship(back_populates="staff")
     bookings: List["Booking"] = Relationship(back_populates="staff")
@@ -154,7 +205,10 @@ class Booking(SQLModel, table=True):
     payment_method: Optional[str] = None
     check_in: Optional[str] = None
     check_out: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Optional[Admin] = Relationship(back_populates="bookings")
     room: Optional[Room] = Relationship(back_populates="bookings")
@@ -185,7 +239,10 @@ class Inbox(SQLModel, table=True):
     admin_id: Optional[int] = Field(default=None, foreign_key="admin.id")
     email: Optional[str] = None
     body: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Optional[Admin] = Relationship(back_populates="inboxes")
 
@@ -199,25 +256,23 @@ class Blog(SQLModel, table=True):
     description: Optional[str] = None
     image_url: Optional[str] = None
     video_url: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Optional[Admin] = Relationship(back_populates="blogs")
-
 
 class Dataset(SQLModel, table=True):
     __tablename__ = "dataset"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    admin_id: Optional[int] = Field(default=None, foreign_key="admin.id", unique=True)
+    admin_id: int = Field(foreign_key="admin.id", index=True)   # <-- this was missing
+    admin: Optional["Admin"] = Relationship(back_populates="datasets")
     title: str
     description: Optional[str] = None
-    intent: Optional[List[Dict[str, Any]]] = Field(
-        default_factory=list,
-        sa_type=JSON
-    )
-    admin: Optional["Admin"] = Relationship(back_populates="dataset")
-
-
+    intent: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    
 class CallLog(SQLModel, table=True):
     __tablename__ = "call_logs"
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -226,7 +281,10 @@ class CallLog(SQLModel, table=True):
     duration: str
     sentiment: str
     admin_id: int = Field(foreign_key="admin.id")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     admin: Admin = Relationship(back_populates="call_logs")
 
@@ -266,6 +324,11 @@ class TaskStatus(str, Enum):
     in_progress = "in progress"  # value matches what the React UI sends/expects
     completed = "completed"
 
+class AssignedStaff(BaseModel):
+    id: int
+    name: str
+    role: str
+
 
 # ---------- Task DB table ----------
 class Task(SQLModel, table=True):
@@ -277,38 +340,45 @@ class Task(SQLModel, table=True):
     task_title: str = Field(max_length=200)
     description: Optional[str] = None
     department: str = Field(index=True)
-    assigned_staff: dict = Field(
-        default_factory=dict, 
-        sa_column=Column(JSONB, nullable=False, default={})
-    )
-
-    # stored as plain strings (validated by the enums in the request schemas below)
-    # so you avoid native Postgres ENUM types and painful migrations
+    assigned_staff: dict = Field(sa_column=Column(JSONB, nullable=False))
     priority: str = Field(default="medium", index=True)
     status: str = Field(default="pending", index=True)
 
     due_date: date = Field(index=True)
     due_time: Optional[time] = None
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     # Must match Admin.tasks (back_populates="admin" <-> back_populates="tasks")
     admin: Optional["Admin"] = Relationship(back_populates="tasks")
 
 
 # ---------- Task request schemas (not tables) ----------
-class TaskCreate(SQLModel):
-    model_config = {"use_enum_values": True}  # model_dump() returns plain strings, safe for the DB
+    
 
-    task_title: str
+
+class TaskCreate(SQLModel):
+    task_title: str = Field(max_length=200)
     description: Optional[str] = None
     department: str
-    assigned_staff: str
+    assigned_staff: AssignedStaff
     priority: TaskPriority = TaskPriority.medium
     status: TaskStatus = TaskStatus.pending
     due_date: date
     due_time: Optional[time] = None
+
+    # tolerate a frontend that still sends a JSON string
+    @field_validator("assigned_staff", mode="before")
+    @classmethod
+    def parse_if_string(cls, v):
+        return json.loads(v) if isinstance(v, str) else v
 
 
 class TaskUpdate(SQLModel):

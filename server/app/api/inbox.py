@@ -1,11 +1,11 @@
 # CRUD inbox
-from fastapi import APIRouter, HTTPException, status, Header, Form
+from fastapi import APIRouter, HTTPException, status, Form, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import Inbox
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, require_admin
 
 router = APIRouter(prefix="/inbox", tags=["inbox"])
 
@@ -22,7 +22,7 @@ def create_inbox(
             "admin_id": admin_id,
             "email": email,
             "body": body,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         
         success, inbox = create_data("inbox", inbox_dict, session)
@@ -50,14 +50,8 @@ def create_inbox(
 @router.get("/get_inboxes")
 def read_inboxes(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         inboxes = get_admin_data(auth["admin_id"], "inbox", session)
@@ -80,14 +74,8 @@ def read_inboxes(
 def delete_inbox(
     session: SessionDep,
     inbox_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing inbox

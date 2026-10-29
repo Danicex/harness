@@ -1,11 +1,11 @@
 # CRUD product
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Query, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import Product
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_optional_user, require_admin
 from app.services.upload import handle_file_upload
 from pydantic import BaseModel
 
@@ -40,14 +40,8 @@ async def create_product(
     category: Optional[str] = Form(None),
     quantity: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Handle file upload
@@ -64,7 +58,7 @@ async def create_product(
             "category": category,
             "quantity": quantity,
             "image_url": image_url,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         
         success, product = create_data("product", product_dict, session)
@@ -89,15 +83,11 @@ async def create_product(
 def read_products(
     session: SessionDep,
     admin_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None)
+    auth: Optional[AuthUser] = Depends(get_optional_user),
 ):
     resolved_admin_id = admin_id
 
-    if authorization:
-        token = authorization.split(" ")[1]
-        auth = isAuthorized(token)
-        if not auth:
-            raise HTTPException(status_code=401, detail="Not authorized")
+    if auth:
         resolved_admin_id = auth["admin_id"]  # token wins over query param
 
     if not resolved_admin_id:
@@ -124,14 +114,8 @@ def read_products(
 def get_single_product(
     session: SessionDep,
     product_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         product = get_single_data(product_id, "product", session)
@@ -162,14 +146,8 @@ async def update_product(
     category: Optional[str] = Form(None),
     quantity: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing product
@@ -230,14 +208,8 @@ async def update_product(
 def delete_product(
     session: SessionDep,
     product_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing product

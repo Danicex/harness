@@ -1,12 +1,12 @@
 # CRUD sales
-from fastapi import APIRouter, HTTPException, Header, Form, status
+from fastapi import APIRouter, HTTPException, Form, status, Depends
 from fastapi import status as http_status
 from typing import Optional
 from datetime import datetime
 from app.database import SessionDep
 from app.model import Sales
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data, get_data_by_period
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_current_user
 import json
 
 router = APIRouter(prefix="/sales", tags=["sales"])
@@ -19,12 +19,8 @@ def create_sale(
     payment_method: Optional[str] = Form(None),
     customer_name: Optional[str] = Form(None),
     product_data: Optional[str] = Form(None), 
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Parse product_data JSON
@@ -82,7 +78,7 @@ def create_sale(
         # Create sale record
         sale_dict = {
             "admin_id": auth.get("admin_id"),
-            "staff_id": staff_id if staff_id else auth.get("staff_id"),
+            "staff_id": auth.get("staff_id") or staff_id,  # staff cannot record a sale as someone else
             "payment_method": payment_method,
             "total_amount": str(total_amount),
             "products_data": products_info, 
@@ -122,12 +118,8 @@ def create_sale(
 @router.get("/get_sales")
 def read_sales(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
 
     try:
@@ -150,12 +142,8 @@ def read_sales(
 def get_single_sale(
     session: SessionDep,
     sale_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
 
     try:
@@ -187,12 +175,8 @@ def update_sale(
     quantity: Optional[str] = Form(None),
     name: Optional[str] = Form(None),
     payment_method: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
 
     try:
@@ -252,12 +236,8 @@ async def get_sales_period(
 session: SessionDep,
    month: str = None,
    date: str = None,
-   authorization: str = Header(...)
+   auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     
     if month: 
@@ -282,14 +262,7 @@ session: SessionDep,
 # def delete_sale(
 #     session: SessionDep,
 #     sale_id: int,
-#     authorization: str = Header(...)
 # ):
-#     token = authorization.split(" ")[1]
-#     auth = isAuthorized(token)
-#     if not auth:
-#         raise HTTPException(status_code=401, detail="Not authorized")
-#     if auth.get("role") != "admin":
-#         raise HTTPException(status_code=401, detail="Not authorized")
 
 #     try:
 #         # Get existing sale

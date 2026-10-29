@@ -1009,7 +1009,6 @@ if (searchTerm) {
             date: new Date(booking.created_at).toLocaleString(),
             customer_name: booking.customer_name,
             room_number: booking.room_number,
-            room_type: booking.room_type,
             check_in: booking.check_in,
             check_out: booking.check_out,
             duration: booking.duration,

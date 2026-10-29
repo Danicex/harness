@@ -48,3 +48,5 @@ async def send_mail(
     except Exception as e:
         print(f"Error sending email: {e}")
         return False
+
+

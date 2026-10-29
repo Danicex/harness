@@ -7,6 +7,7 @@ import './CoreComponents/Styles/AllStyles.css'
 import ProtectedRoute from "./ProtectedRoute"
 import NotFound from "./NotFound"
 import PageSpinner from "./components/PageSpinner"
+import AdminLogin from "./admin_panel/AdminLogin"
 
 // Every page is lazy-loaded: each route's code only downloads when the
 // user actually navigates there, instead of all being bundled into the
@@ -20,6 +21,7 @@ const Subscribe = lazy(() => import("./Auth/Subscribe"))
 const InboxPage = lazy(() => import("./CoreComponents/Messaging/CreateInbox"))
 const HTMLTextEditor = lazy(() => import("./CoreComponents/Marketing/TextEditor"))
 const Contact = lazy(() => import("./Contact"))
+const AdminPanel = lazy(() => import("./admin_panel/page"))
 
 // Named exports need a small adapter so React.lazy (which expects a
 // default export) can resolve them.
@@ -66,7 +68,9 @@ function App() {
           <Route path="/signup" element={<Signup/>} />
           <Route path="/login" element={<Login/>} />
           <Route path="/contact" element={<Contact/>} />
+          <Route path="/admin_panel" element={<AdminPanel/>} />
          <Route path="/password_reset" element={<ResetPassword />} />
+         <Route path="/admin_login" element={<AdminLogin />} />
           <Route path="/request_reset_link" element={<SendResetPasswordLink />} />
           <Route path="/inbox" element={<InboxPage/>} />
         </Routes>

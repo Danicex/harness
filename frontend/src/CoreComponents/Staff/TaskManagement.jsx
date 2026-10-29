@@ -1,26 +1,61 @@
 "use client"
 
-// React
+/* ==========================================================================
+   Task management (React + shadcn/ui) tailored to the FastAPI task router:
+
+     POST   /task/create_task
+     GET    /task/get_task
+     GET    /task/{task_id}
+     PUT    /task/update_task/{task_id}
+     DELETE /task/delete_task/{task_id}
+
+   Auth: the backend reads `Authorization: Bearer <token>`. Make sure your axios
+   instance (@/lib/api) sets that header, e.g.
+
+     api.interceptors.request.use((cfg) => {
+       const token = localStorage.getItem("token")
+       if (token) cfg.headers.Authorization = `Bearer ${token}`
+       return cfg
+     })
+
+   Backend notes:
+   - `assigned_staff` is one string column. We store JSON ({id, name, role}) in it
+     so the staff id is preserved, and parse it when reading (old rows holding a
+     plain name still work).
+   - TaskUpdate must accept all form fields as optional (update uses exclude_none).
+   ========================================================================== */
+
 import React, { useState, useEffect, useMemo } from "react"
 
-// Date utilities
-import {addMonths,differenceInCalendarDays,eachDayOfInterval,endOfMonth,endOfWeek,format,isSameDay,isSameMonth,parseISO,startOfDay,startOfMonth,startOfWeek,subMonths,
+import {
+  addMonths,
+  differenceInCalendarDays,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
 } from "date-fns"
 
-// Icons
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Building2, CalendarDays, CalendarX2, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, Clock, Flag, FilterX, LayoutGrid, LayoutList, Loader2, MoreVertical, MousePointerClick, Pencil, Search, TableProperties, Trash2, User, X, Check, ChevronsUpDown,
+import {
+  AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Building2, CalendarDays, CalendarX2,
+  CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, Clock, Flag, FilterX, LayoutList,
+  Loader2, MousePointerClick, Pencil, Search, Trash2, User, X, Check, ChevronsUpDown,
 } from "lucide-react"
 
-// Third-Party Libraries
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 
-// Local Utilities / API
-import api from "@/lib/api" // your axios instance
+import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-// UI Components (shadcn/ui)
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -29,45 +64,30 @@ import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-export default function TaskManagement() {
-  const [show, setShow] = useState(false)
-  return (
-    <div className="container mx-auto">
-      <Button onClick={()=>setShow(!show)}>Create Task</Button>
-      {show && (
-        <div className='absolute left-0 right-0 z-50 top-0'>
-           <CreateTaskForm setShow={setShow}/>
-        </div>
-      )}
-      <RenderTask />
-    </div>
-  )
+/* -------------------------------------------------------------------------- */
+/*  API layer                                                                 */
+/* -------------------------------------------------------------------------- */
+
+const taskApi = {
+  list: () => api.get("/task/get_task").then((r) => (Array.isArray(r.data) ? r.data : [])),
+  create: (payload) => api.post("/task/create_task", payload).then((r) => r.data.task),
+  update: (id, body) => api.put(`/task/update_task/${id}`, body).then((r) => r.data.task),
+  remove: (id) => api.delete(`/task/delete_task/${id}`),
 }
 
-/* ------------------------------ schema ------------------------------ */
-const formSchema = z.object({
-  task_title: z.string().min(2, { message: "Title must be at least 2 characters." }),
-  description: z.string().min(5, { message: "Description must be at least 5 characters." }),
-  // assigned_staff is now an object (picked from the staff list), not a free-text string
-  assigned_staff: z
-    .object({
-      id: z.union([z.number(), z.string()]),
-      name: z.string(),
-      role: z.string().optional(),
-    })
-    .refine((s) => s.name.length > 0, { message: "Please assign a staff member." }),
-  department: z.string().min(1, { message: "Please select a department." }),
-  priority: z.string().min(1, { message: "Please select a priority level." }),
-  due_date: z.string().min(1, { message: "Please select a due date." }),
-  due_time: z.string().min(1, { message: "Please select a due time." }),
-  status: z.string().min(1, { message: "Please select a status." }),
-})
+// FastAPI `detail` is a string for HTTPException and an array for validation errors
+const apiError = (e) => {
+  const d = e?.response?.data?.detail
+  if (typeof d === "string") return d
+  if (Array.isArray(d)) return d.map((x) => x.msg).join(", ")
+  return "Something went wrong"
+}
 
-/* --------------------- departments + role matching --------------------- */
-// `aliases` are matched against the staff member's `role` text.
-// Edit these to fit the role names you actually use for staff.
+/* -------------------------------------------------------------------------- */
+/*  Departments + role matching                                               */
+/* -------------------------------------------------------------------------- */
+
 const DEPARTMENTS = [
   { value: "management", label: "General Management", aliases: ["general manager", "management"] },
   { value: "hr", label: "Human Resources", aliases: ["hr", "human resources"] },
@@ -83,7 +103,6 @@ const DEPARTMENTS = [
 
 const normalize = (s) => (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()
 
-// returns a department value, or "" if the role doesn't map to one
 const matchDepartment = (role) => {
   const r = normalize(role)
   if (!r) return ""
@@ -93,12 +112,272 @@ const matchDepartment = (role) => {
   return hit?.value ?? ""
 }
 
-/* ------------------------- staff combobox ------------------------- */
+const deptLabel = (v) => DEPARTMENTS.find((d) => d.value === v)?.label ?? v ?? ""
+
+/* -------------------------------------------------------------------------- */
+/*  Config                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const PRIORITY = {
+  high: {
+    label: "High", rank: 3, dot: "bg-rose-500", accent: "border-l-rose-500",
+    pill: "bg-rose-500/10 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20",
+    badge: "bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-rose-500/25",
+  },
+  medium: {
+    label: "Medium", rank: 2, dot: "bg-amber-500", accent: "border-l-amber-500",
+    pill: "bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20",
+    badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/25",
+  },
+  low: {
+    label: "Low", rank: 1, dot: "bg-emerald-500", accent: "border-l-emerald-500",
+    pill: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20",
+    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25",
+  },
+}
+const PRIORITY_FALLBACK = {
+  label: "None", rank: 0, dot: "bg-slate-400", accent: "border-l-slate-400",
+  pill: "bg-slate-500/10 text-slate-700 dark:text-slate-300 hover:bg-slate-500/20",
+  badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300 ring-slate-500/25",
+}
+const priorityOf = (p) => PRIORITY[p] ?? PRIORITY_FALLBACK
+
+const STATUS = {
+  pending: {
+    label: "Pending", icon: CircleDashed, dot: "bg-amber-500",
+    badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/25",
+  },
+  "in progress": {
+    label: "In progress", icon: Loader2, dot: "bg-sky-500",
+    badge: "bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-sky-500/25",
+  },
+  completed: {
+    label: "Completed", icon: CheckCircle2, dot: "bg-emerald-500",
+    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25",
+  },
+}
+const statusOf = (s) => STATUS[s] ?? { ...STATUS.pending, label: s || "Pending" }
+
+const AVATAR_TONES = [
+  "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  "bg-teal-500/15 text-teal-700 dark:text-teal-300",
+]
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const MAX_PILLS = 3
+
+/* -------------------------------------------------------------------------- */
+/*  Helpers                                                                   */
+/* -------------------------------------------------------------------------- */
+
+// assigned_staff is stored as a JSON string: {"id":..,"name":..,"role":..}
+const parseStaff = (raw) => {
+  if (!raw) return { name: "", id: null, role: "" }
+  if (typeof raw === "object") return { name: raw.name ?? "", id: raw.id ?? null, role: raw.role ?? "" }
+  try {
+    const o = JSON.parse(raw)
+    if (o && typeof o === "object") return { name: o.name ?? "", id: o.id ?? null, role: o.role ?? "" }
+  } catch {
+    /* old rows may hold a plain name */
+  }
+  return { name: String(raw), id: null, role: "" }
+}
+
+// API row -> the one shape the UI works with
+const normalizeTask = (t) => {
+  const s = parseStaff(t.assigned_staff)
+  return {
+    id: t.id,
+    title: t.task_title ?? "Untitled task",
+    description: t.description ?? "",
+    department: t.department ?? "",
+    staff: s.name, // filters, avatars and search work on the name
+    staffId: s.id,
+    staffRole: s.role,
+    priority: String(t.priority ?? "").toLowerCase(),
+    dueDate: String(t.due_date ?? "").slice(0, 10),
+    dueTime: String(t.due_time ?? "").slice(0, 5), // "HH:MM:SS" -> "HH:MM"
+    status: String(t.status ?? "pending").toLowerCase().replace(/_/g, " "),
+  }
+}
+
+const toDate = (str) => (str ? parseISO(str) : null)
+
+const formatTime = (hhmm) => {
+  if (!hhmm) return ""
+  const [h, m] = hhmm.split(":").map(Number)
+  if (Number.isNaN(h)) return hhmm
+  const d = new Date()
+  d.setHours(h, m || 0, 0, 0)
+  return format(d, "h:mm a")
+}
+
+const initials = (name) =>
+  (name || "?").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join("")
+
+const toneFor = (name) => {
+  let hash = 0
+  for (const ch of name || "") hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return AVATAR_TONES[hash % AVATAR_TONES.length]
+}
+
+const isOverdue = (task, today) => {
+  const due = toDate(task.dueDate)
+  return !!due && task.status !== "completed" && differenceInCalendarDays(due, today) < 0
+}
+
+const relativeDue = (task, today) => {
+  const due = toDate(task.dueDate)
+  if (!due) return null
+  if (task.status === "completed") return { text: "Completed", tone: "text-emerald-600 dark:text-emerald-400" }
+  const diff = differenceInCalendarDays(due, today)
+  if (diff === 0) return { text: "Due today", tone: "text-amber-600 dark:text-amber-400" }
+  if (diff === 1) return { text: "Due tomorrow", tone: "text-muted-foreground" }
+  if (diff > 1) return { text: `Due in ${diff} days`, tone: "text-muted-foreground" }
+  const late = Math.abs(diff)
+  return { text: `Overdue by ${late} day${late === 1 ? "" : "s"}`, tone: "text-rose-600 dark:text-rose-400" }
+}
+
+const matchesFilters = (t, f, q) =>
+  (f.department === "all" || t.department === f.department) &&
+  (f.priority === "all" || t.priority === f.priority) &&
+  (f.status === "all" || t.status === f.status) &&
+  (f.staff === "all" || t.staff === f.staff) &&
+  (!q || `${t.title} ${t.description} ${t.staff} ${deptLabel(t.department)}`.toLowerCase().includes(q))
+
+const compareTasks = (a, b, key) => {
+  switch (key) {
+    case "priority":
+      return priorityOf(a.priority).rank - priorityOf(b.priority).rank
+    case "due":
+      return `${a.dueDate} ${a.dueTime}`.localeCompare(`${b.dueDate} ${b.dueTime}`)
+    case "department":
+      return deptLabel(a.department).localeCompare(deptLabel(b.department))
+    default:
+      return String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
+  }
+}
+
+/* ========================================================================== */
+/*  Page: owns the data, the form modal and all API calls                     */
+/* ========================================================================== */
+
+export default function TaskManagement() {
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [editing, setEditing] = useState(null) // null | "new" | normalized task
+
+  useEffect(() => {
+    let alive = true
+    taskApi
+      .list()
+      .then((rows) => alive && setTasks(rows.map(normalizeTask)))
+      .catch((e) => alive && setError(apiError(e)))
+      .finally(() => alive && setLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // insert or replace a task returned by the API
+  const upsert = (raw) => {
+    const t = normalizeTask(raw)
+    setTasks((prev) =>
+      prev.some((x) => x.id === t.id) ? prev.map((x) => (x.id === t.id ? t : x)) : [...prev, t]
+    )
+  }
+
+  const complete = async (id) => {
+    const before = tasks
+    setTasks((p) => p.map((t) => (t.id === id ? { ...t, status: "completed" } : t))) // optimistic
+    try {
+      await taskApi.update(id, { status: "completed" })
+      setError("")
+    } catch (e) {
+      setTasks(before) // rollback
+      setError(apiError(e))
+    }
+  }
+
+  // resolves true when the task was actually deleted
+  const remove = async (task) => {
+    if (!window.confirm(`Delete "${task.title}"?`)) return false
+    try {
+      await taskApi.remove(task.id)
+      setTasks((p) => p.filter((t) => t.id !== task.id))
+      setError("")
+      return true
+    } catch (e) {
+      setError(apiError(e))
+      return false
+    }
+  }
+
+  return (
+    <div className="container mx-auto">
+      <div className="flex items-center gap-3 pt-4">
+        <Button onClick={() => setEditing("new")}>Create Task</Button>
+        {error && (
+          <p className="flex-1 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-600 dark:text-rose-400">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {editing && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
+          <TaskForm
+            task={editing === "new" ? null : editing}
+            onClose={() => setEditing(null)}
+            onSaved={(raw) => {
+              upsert(raw)
+              setEditing(null)
+            }}
+          />
+        </div>
+      )}
+
+      <RenderTask
+        tasks={tasks}
+        loading={loading}
+        onComplete={complete}
+        onEdit={setEditing}
+        onDelete={remove}
+      />
+    </div>
+  )
+}
+
+/* ========================================================================== */
+/*  Form (create + edit)                                                      */
+/* ========================================================================== */
+
+const formSchema = z.object({
+  task_title: z.string().min(2, { message: "Title must be at least 2 characters." }),
+  description: z.string().min(5, { message: "Description must be at least 5 characters." }),
+  assigned_staff: z
+    .object({
+      id: z.union([z.number(), z.string()]),
+      name: z.string(),
+      role: z.string().optional(),
+    })
+    .refine((s) => s.name.length > 0, { message: "Please assign a staff member." }),
+  department: z.string().min(1, { message: "Please select a department." }),
+  priority: z.string().min(1, { message: "Please select a priority level." }),
+  due_date: z.string().min(1, { message: "Please select a due date." }),
+  due_time: z.string().min(1, { message: "Please select a due time." }),
+  status: z.string().min(1, { message: "Please select a status." }),
+})
+
 function StaffCombobox({ staff, value, onSelect, loading }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
 
-  // Filter by staff NAME only (cmdk's built-in filter is off so ids/roles don't match)
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return q ? staff.filter((s) => s.name?.toLowerCase().includes(q)) : staff
@@ -144,7 +423,7 @@ function StaffCombobox({ staff, value, onSelect, loading }) {
                     setOpen(false)
                   }}
                 >
-                  <Check className={cn("mr-2 h-4 w-4", value?.id === s.id ? "opacity-100" : "opacity-0")} />
+                  <Check className={cn("mr-2 h-4 w-4", String(value?.id) === String(s.id) ? "opacity-100" : "opacity-0")} />
                   <div className="flex min-w-0 flex-col">
                     <span className="truncate">{s.name}</span>
                     {s.role && <span className="text-xs text-muted-foreground">{s.role}</span>}
@@ -159,32 +438,44 @@ function StaffCombobox({ staff, value, onSelect, loading }) {
   )
 }
 
-/* ---------------------------- main form ---------------------------- */
-export function CreateTaskForm({ setShow, onCreated }) {
+const EMPTY_VALUES = {
+  task_title: "",
+  description: "",
+  assigned_staff: { name: "", id: "", role: "" },
+  department: "",
+  priority: "",
+  due_date: "",
+  due_time: "",
+  status: "pending",
+}
+
+export function TaskForm({ task, onClose, onSaved }) {
+  const isEdit = !!task
   const [staffList, setStaffList] = useState([])
   const [staffLoading, setStaffLoading] = useState(true)
 
   const form = useForm({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      task_title: "",
-      description: "",
-      assigned_staff: { name: "", id: "", role: "" },
-      department: "",
-      priority: "",
-      due_date: "",
-      due_time: "",
-      status: "pending",
-    },
+    defaultValues: task
+      ? {
+          task_title: task.title,
+          description: task.description,
+          assigned_staff: { id: task.staffId ?? "", name: task.staff, role: task.staffRole },
+          department: task.department,
+          priority: task.priority,
+          due_date: task.dueDate,
+          due_time: task.dueTime,
+          status: task.status,
+        }
+      : EMPTY_VALUES,
   })
 
-  // get staff
   useEffect(() => {
     let alive = true
     ;(async () => {
       try {
         const res = await api.get("/staff/get_staff")
-        const data = res.data // axios response: the list lives in .data
+        const data = res.data
         if (alive) setStaffList(Array.isArray(data) ? data : data?.staff ?? [])
       } catch (err) {
         console.error("Error fetching staff:", err)
@@ -208,198 +499,130 @@ export function CreateTaskForm({ setShow, onCreated }) {
     if (dept) form.setValue("department", dept, { shouldValidate: true, shouldDirty: true })
   }
 
-  const resetForm = () => {
-    form.reset() // back to defaultValues
-    setShow(false) // close the modal
-  }
-
   async function onSubmit(values) {
-    try {
-     const  staff_data ={
-  name: values.assigned_staff.name,
-  id: values.assigned_staff.id,
-  role: values.assigned_staff.role,
-}
-const x  = JSON.stringify(staff_data)
-      const payload = {
-        task_title: values.task_title.trim(),
-        description: values.description?.trim() || null,
-        department: values.department,
-        assigned_staff: x,
-        // backend stores the staff NAME (string)
-        priority: values.priority, // "low" | "medium" | "high"
-        status: values.status, // "pending" | "in progress" | "completed"
-        due_date: values.due_date, // "YYYY-MM-DD"
-        due_time: values.due_time || null, // "HH:MM" or null
-      }
+    const payload = {
+      task_title: values.task_title.trim(),
+      description: values.description.trim(),
+      department: values.department,
+      // stored in one string column; parsed back by parseStaff()
+      assigned_staff: JSON.stringify({
+        id: values.assigned_staff.id,
+        name: values.assigned_staff.name,
+        role: values.assigned_staff.role,
+      }),
+      priority: values.priority, // "low" | "medium" | "high"
+      status: values.status, // "pending" | "in progress" | "completed"
+      due_date: values.due_date, // "YYYY-MM-DD"
+      due_time: values.due_time || null, // "HH:MM" or null
+    }
 
-      const response = await api.post("task/create_task", payload)
-      onCreated?.(response.data.task)
-      resetForm()
-    } catch (error) {
-      console.error("Submission failed:", error.response?.data?.detail ?? error)
+    try {
+      const saved = isEdit ? await taskApi.update(task.id, payload) : await taskApi.create(payload)
+      onSaved(saved)
+    } catch (e) {
+      // 401 / 403 / 404 / 400 `detail` from the API
+      form.setError("root", { message: apiError(e) })
     }
   }
 
   return (
     <Form {...form}>
-      <div className="bg-black/50">
-        <form onSubmit={form.handleSubmit(onSubmit)} >
-          <Card className="mx-auto max-w-2xl space-y-6 rounded-lg border p-6">
-            <X onClick={() => setShow(false)} className="float-right cursor-pointer" />
-            <h2 className="mb-4 text-2xl font-bold">Create New Task</h2>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <Card className="mx-auto max-w-2xl space-y-6 rounded-lg border p-6">
+          <button type="button" onClick={onClose} className="float-right" aria-label="Close form">
+            <X className="h-5 w-5" />
+          </button>
+          <h2 className="mb-4 text-2xl font-bold">{isEdit ? "Edit Task" : "Create New Task"}</h2>
 
-            {/* Task Title */}
+          <FormField
+            control={form.control}
+            name="task_title"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Task Title</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter task title" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="Describe the task details..." {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
-              name="task_title"
+              name="assigned_staff"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Task Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter task title" {...field} />
-                  </FormControl>
+                <FormItem className="flex flex-col">
+                  <FormLabel>Assigned Staff</FormLabel>
+                  <StaffCombobox
+                    staff={staffList}
+                    value={field.value}
+                    onSelect={handleStaffSelect}
+                    loading={staffLoading}
+                  />
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Description */}
             <FormField
               control={form.control}
-              name="description"
+              name="department"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Describe the task details..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {/* Assigned Staff (command list) */}
-              <FormField
-                control={form.control}
-                name="assigned_staff"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Assigned Staff</FormLabel>
-                    <StaffCombobox
-                      staff={staffList}
-                      value={field.value}
-                      onSelect={handleStaffSelect}
-                      loading={staffLoading}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Department */}
-              <FormField
-                control={form.control}
-                name="department"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Department</FormLabel>
-                    {/* `value` (not defaultValue) so setValue() from the staff picker updates the display */}
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {DEPARTMENTS.map((d) => (
-                          <SelectItem key={d.value} value={d.value}>
-                            {d.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              {/* Priority */}
-              <FormField
-                control={form.control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select level" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Due Date */}
-              <FormField
-                control={form.control}
-                name="due_date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Due Date</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Due Time */}
-              <FormField
-                control={form.control}
-                name="due_time"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Due Time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Status */}
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
+                  <FormLabel>Department</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Set status" />
+                        <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      {/* space, not underscore: the API rejects "in_progress" */}
-                      <SelectItem value="in progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
+                      {DEPARTMENTS.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>
+                          {d.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <FormField
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Priority</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select level" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -407,392 +630,70 @@ const x  = JSON.stringify(staff_data)
               )}
             />
 
-            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? "Creating…" : "Create Task"}
-            </Button>
-          </Card>
-        </form>
-      </div>
+            <FormField
+              control={form.control}
+              name="due_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Due Date</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="due_time"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Due Time</FormLabel>
+                  <FormControl>
+                    <Input type="time" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Set status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    {/* space, not underscore: the API rejects "in_progress" */}
+                    <SelectItem value="in progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {form.formState.errors.root && (
+            <p className="text-sm text-rose-600">{form.formState.errors.root.message}</p>
+          )}
+
+          <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? "Saving…" : isEdit ? "Save changes" : "Create Task"}
+          </Button>
+        </Card>
+      </form>
     </Form>
   )
-}
-// dummy-tasks.js
-export const dummyTasks = [
-  {
-    task_title: "Design new landing page",
-    "Task title": "Design new landing page",
-    description: "Create wireframes and high-fidelity mockups for the Q4 campaign landing page.",
-    Description: "Create wireframes and high-fidelity mockups for the Q4 campaign landing page.",
-    department: "Design",
-    Department: "Design",
-    assigned_staff: "Amara Okafor",
-    "Assigned staff": "Amara Okafor",
-    priority: "high",
-    Priority: "high",
-    due_date: "2026-09-01",
-    "Due date": "2026-09-01",
-    due_time: "10:00",
-    "Due time": "10:00",
-    status: "in progress",
-    Status: "in progress",
-  },
-  {
-    task_title: "Fix login authentication bug",
-    "Task title": "Fix login authentication bug",
-    description: "Resolve token refresh failure on expired sessions.",
-    Description: "Resolve token refresh failure on expired sessions.",
-    department: "Engineering",
-    Department: "Engineering",
-    assigned_staff: "Tunde Bakare",
-    "Assigned staff": "Tunde Bakare",
-    priority: "high",
-    Priority: "high",
-    due_date: "2026-09-03",
-    "Due date": "2026-09-03",
-    due_time: "14:30",
-    "Due time": "14:30",
-    status: "pending",
-    Status: "pending",
-  },
-  {
-    task_title: "Quarterly budget review",
-    "Task title": "Quarterly budget review",
-    description: "Reconcile Q3 spend and prepare variance report for finance.",
-    Description: "Reconcile Q3 spend and prepare variance report for finance.",
-    department: "Finance",
-    Department: "Finance",
-    assigned_staff: "Chioma Eze",
-    "Assigned staff": "Chioma Eze",
-    priority: "medium",
-    Priority: "medium",
-    due_date: "2026-09-05",
-    "Due date": "2026-09-05",
-    due_time: "09:00",
-    "Due time": "09:00",
-    status: "completed",
-    Status: "completed",
-  },
-  {
-    task_title: "Onboard new marketing intern",
-    "Task title": "Onboard new marketing intern",
-    description: "Set up accounts, walk through tools, and assign first project.",
-    Description: "Set up accounts, walk through tools, and assign first project.",
-    department: "Marketing",
-    Department: "Marketing",
-    assigned_staff: "Amara Okafor",
-    "Assigned staff": "Amara Okafor",
-    priority: "low",
-    Priority: "low",
-    due_date: "2026-09-08",
-    "Due date": "2026-09-08",
-    due_time: "11:00",
-    "Due time": "11:00",
-    status: "pending",
-    Status: "pending",
-  },
-  {
-    task_title: "Migrate database to new cluster",
-    "Task title": "Migrate database to new cluster",
-    description: "Plan zero-downtime migration and run staging dry run.",
-    Description: "Plan zero-downtime migration and run staging dry run.",
-    department: "Engineering",
-    Department: "Engineering",
-    assigned_staff: "Tunde Bakare",
-    "Assigned staff": "Tunde Bakare",
-    priority: "high",
-    Priority: "high",
-    due_date: "2026-09-12",
-    "Due date": "2026-09-12",
-    due_time: "16:00",
-    "Due time": "16:00",
-    status: "in progress",
-    Status: "in progress",
-  },
-  {
-    task_title: "Draft social media calendar",
-    "Task title": "Draft social media calendar",
-    description: "Outline posts for October across all channels.",
-    Description: "Outline posts for October across all channels.",
-    department: "Marketing",
-    Department: "Marketing",
-    assigned_staff: "Ngozi Adeyemi",
-    "Assigned staff": "Ngozi Adeyemi",
-    priority: "medium",
-    Priority: "medium",
-    due_date: "2026-09-15",
-    "Due date": "2026-09-15",
-    due_time: "13:00",
-    "Due time": "13:00",
-    status: "in progress",
-    Status: "in progress",
-  },
-  {
-    task_title: "Audit vendor contracts",
-    "Task title": "Audit vendor contracts",
-    description: "Review renewal dates and flag auto-renew clauses.",
-    Description: "Review renewal dates and flag auto-renew clauses.",
-    department: "Legal",
-    Department: "Legal",
-    assigned_staff: "Chioma Eze",
-    "Assigned staff": "Chioma Eze",
-    priority: "low",
-    Priority: "low",
-    due_date: "2026-09-18",
-    "Due date": "2026-09-18",
-    due_time: "15:30",
-    "Due time": "15:30",
-    status: "pending",
-    Status: "pending",
-  },
-  {
-    task_title: "Ship mobile app v2.3",
-    "Task title": "Ship mobile app v2.3",
-    description: "Final QA pass, release notes, and store submission.",
-    Description: "Final QA pass, release notes, and store submission.",
-    department: "Engineering",
-    Department: "Engineering",
-    assigned_staff: "Amara Okafor",
-    "Assigned staff": "Amara Okafor",
-    priority: "high",
-    Priority: "high",
-    due_date: "2026-09-21",
-    "Due date": "2026-09-21",
-    due_time: "17:00",
-    "Due time": "17:00",
-    status: "pending",
-    Status: "pending",
-  },
-  {
-    task_title: "Update employee handbook",
-    "Task title": "Update employee handbook",
-    description: "Incorporate new remote-work and leave policies.",
-    Description: "Incorporate new remote-work and leave policies.",
-    department: "HR",
-    Department: "HR",
-    assigned_staff: "Ngozi Adeyemi",
-    "Assigned staff": "Ngozi Adeyemi",
-    priority: "medium",
-    Priority: "medium",
-    due_date: "2026-09-24",
-    "Due date": "2026-09-24",
-    due_time: "10:30",
-    "Due time": "10:30",
-    status: "completed",
-    Status: "completed",
-  },
-  {
-    task_title: "Prepare investor deck",
-    "Task title": "Prepare investor deck",
-    description: "Compile metrics, growth charts, and roadmap summary.",
-    Description: "Compile metrics, growth charts, and roadmap summary.",
-    department: "Finance",
-    Department: "Finance",
-    assigned_staff: "Chioma Eze",
-    "Assigned staff": "Chioma Eze",
-    priority: "high",
-    Priority: "high",
-    due_date: "2026-09-28",
-    "Due date": "2026-09-28",
-    due_time: "08:30",
-    "Due time": "08:30",
-    status: "in progress",
-    Status: "in progress",
-  },
-  {
-    task_title: "Refactor notification service",
-    "Task title": "Refactor notification service",
-    description: "Extract shared logic and add retry with backoff.",
-    Description: "Extract shared logic and add retry with backoff.",
-    department: "Engineering",
-    Department: "Engineering",
-    assigned_staff: "Tunde Bakare",
-    "Assigned staff": "Tunde Bakare",
-    priority: "low",
-    Priority: "low",
-    due_date: "2026-09-07",
-    "Due date": "2026-09-07",
-    due_time: "12:00",
-    "Due time": "12:00",
-    status: "completed",
-    Status: "completed",
-  },
-  {
-    task_title: "Launch referral program",
-    "Task title": "Launch referral program",
-    description: "Coordinate email blast, in-app banner, and tracking.",
-    Description: "Coordinate email blast, in-app banner, and tracking.",
-    department: "Marketing",
-    Department: "Marketing",
-    assigned_staff: "Amara Okafor",
-    "Assigned staff": "Amara Okafor",
-    priority: "medium",
-    Priority: "medium",
-    due_date: "2026-09-30",
-    "Due date": "2026-09-30",
-    due_time: "14:00",
-    "Due time": "14:00",
-    status: "pending",
-    Status: "pending",
-  },
-]
-
-
-/* -------------------------------------------------------------------------- */
-/*  Config                                                                    */
-/* -------------------------------------------------------------------------- */
-
-// Falls back to dummy data if the API fails or returns nothing. Set to false in prod.
-const USE_DUMMY_FALLBACK = true
-
-const PRIORITY = {
-  high: {
-    label: "High",
-    rank: 3,
-    dot: "bg-rose-500",
-    accent: "border-l-rose-500",
-    pill: "bg-rose-500/10 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20",
-    badge: "bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-rose-500/25",
-  },
-  medium: {
-    label: "Medium",
-    rank: 2,
-    dot: "bg-amber-500",
-    accent: "border-l-amber-500",
-    pill: "bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20",
-    badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/25",
-  },
-  low: {
-    label: "Low",
-    rank: 1,
-    dot: "bg-emerald-500",
-    accent: "border-l-emerald-500",
-    pill: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20",
-    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25",
-  },
-}
-const PRIORITY_FALLBACK = {
-  label: "None",
-  rank: 0,
-  dot: "bg-slate-400",
-  accent: "border-l-slate-400",
-  pill: "bg-slate-500/10 text-slate-700 dark:text-slate-300 hover:bg-slate-500/20",
-  badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300 ring-slate-500/25",
-}
-const priorityOf = (p) => PRIORITY[p] ?? PRIORITY_FALLBACK
-
-const STATUS = {
-  pending: {
-    label: "Pending",
-    icon: CircleDashed,
-    dot: "bg-amber-500",
-    badge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/25",
-  },
-  "in progress": {
-    label: "In progress",
-    icon: Loader2,
-    dot: "bg-sky-500",
-    badge: "bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-sky-500/25",
-  },
-  completed: {
-    label: "Completed",
-    icon: CheckCircle2,
-    dot: "bg-emerald-500",
-    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25",
-  },
-}
-const statusOf = (s) => STATUS[s] ?? { ...STATUS.pending, label: s || "Pending" }
-
-const AVATAR_TONES = [
-  "bg-violet-500/15 text-violet-700 dark:text-violet-300",
-  "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  "bg-rose-500/15 text-rose-700 dark:text-rose-300",
-  "bg-teal-500/15 text-teal-700 dark:text-teal-300",
-]
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-const MAX_PILLS = 3
-
-/* -------------------------------------------------------------------------- */
-/*  Helpers                                                                   */
-/* -------------------------------------------------------------------------- */
-
-// The API / dummy data sometimes carries both snake_case and "Title case" keys.
-// Normalise once so the rest of the UI only deals with one shape.
-const normalizeTask = (t, i) => ({
-  id: t.id ?? t._id ?? `task-${i}`,
-  title: t.task_title ?? t["Task title"] ?? "Untitled task",
-  description: t.description ?? t.Description ?? "",
-  department: t.department ?? t.Department ?? "",
-  staff: t.assigned_staff ?? t["Assigned staff"] ?? "",
-  priority: String(t.priority ?? t.Priority ?? "").toLowerCase(),
-  dueDate: String(t.due_date ?? t["Due date"] ?? "").slice(0, 10),
-  dueTime: t.due_time ?? t["Due time"] ?? "",
-  status: String(t.status ?? t.Status ?? "pending").toLowerCase().replace(/_/g, " "),
-})
-
-const toDate = (str) => (str ? parseISO(str) : null)
-
-const formatTime = (hhmm) => {
-  if (!hhmm) return ""
-  const [h, m] = hhmm.split(":").map(Number)
-  if (Number.isNaN(h)) return hhmm
-  const d = new Date()
-  d.setHours(h, m || 0, 0, 0)
-  return format(d, "h:mm a")
-}
-
-const initials = (name) =>
-  (name || "?")
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0].toUpperCase())
-    .join("")
-
-const toneFor = (name) => {
-  let hash = 0
-  for (const ch of name || "") hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
-  return AVATAR_TONES[hash % AVATAR_TONES.length]
-}
-
-const isOverdue = (task, today) => {
-  const due = toDate(task.dueDate)
-  return !!due && task.status !== "completed" && differenceInCalendarDays(due, today) < 0
-}
-
-const relativeDue = (task, today) => {
-  const due = toDate(task.dueDate)
-  if (!due) return null
-  if (task.status === "completed") return { text: "Completed", tone: "text-emerald-600 dark:text-emerald-400" }
-  const diff = differenceInCalendarDays(due, today)
-  if (diff === 0) return { text: "Due today", tone: "text-amber-600 dark:text-amber-400" }
-  if (diff === 1) return { text: "Due tomorrow", tone: "text-muted-foreground" }
-  if (diff > 1) return { text: `Due in ${diff} days`, tone: "text-muted-foreground" }
-  const late = Math.abs(diff)
-  return {
-    text: `Overdue by ${late} day${late === 1 ? "" : "s"}`,
-    tone: "text-rose-600 dark:text-rose-400",
-  }
-}
-
-const matchesFilters = (t, f, q) =>
-  (f.department === "all" || t.department === f.department) &&
-  (f.priority === "all" || t.priority === f.priority) &&
-  (f.status === "all" || t.status === f.status) &&
-  (f.staff === "all" || t.staff === f.staff) &&
-  (!q || `${t.title} ${t.description} ${t.staff} ${t.department}`.toLowerCase().includes(q))
-
-const compareTasks = (a, b, key) => {
-  switch (key) {
-    case "priority":
-      return priorityOf(a.priority).rank - priorityOf(b.priority).rank
-    case "due":
-      return `${a.dueDate} ${a.dueTime}`.localeCompare(`${b.dueDate} ${b.dueTime}`)
-    default:
-      return String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
-  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -815,12 +716,7 @@ const StatusBadge = ({ status }) => {
   const s = statusOf(status)
   const Icon = s.icon
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        s.badge
-      )}
-    >
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset", s.badge)}>
       <Icon className="h-3 w-3" />
       {s.label}
     </span>
@@ -830,12 +726,7 @@ const StatusBadge = ({ status }) => {
 const PriorityBadge = ({ priority }) => {
   const p = priorityOf(priority)
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        p.badge
-      )}
-    >
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset", p.badge)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", p.dot)} />
       {p.label}
     </span>
@@ -877,9 +768,7 @@ const SegmentedControl = ({ value, onChange, options }) => (
         className={cn(
           "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          value === v
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
+          value === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
         )}
       >
         <Icon className="h-4 w-4" />
@@ -889,6 +778,7 @@ const SegmentedControl = ({ value, onChange, options }) => (
   </div>
 )
 
+// options: [{ value, label }]
 const FilterSelect = ({ value, onChange, placeholder, allLabel, options, icon: Icon }) => (
   <Select value={value} onValueChange={onChange}>
     <SelectTrigger className="h-9 bg-card">
@@ -900,8 +790,8 @@ const FilterSelect = ({ value, onChange, placeholder, allLabel, options, icon: I
     <SelectContent>
       <SelectItem value="all">{allLabel}</SelectItem>
       {options.map((o) => (
-        <SelectItem key={o} value={o} className="capitalize">
-          {o}
+        <SelectItem key={o.value} value={o.value} className="capitalize">
+          {o.label}
         </SelectItem>
       ))}
     </SelectContent>
@@ -976,14 +866,19 @@ const TaskDetail = ({ task, today, onClose, onComplete, onEdit, onDelete }) => {
               {task.staff ? (
                 <span className="flex items-center gap-2">
                   <Avatar name={task.staff} />
-                  {task.staff}
+                  <span className="flex flex-col leading-tight">
+                    {task.staff}
+                    {task.staffRole && (
+                      <span className="text-xs font-normal text-muted-foreground">{task.staffRole}</span>
+                    )}
+                  </span>
                 </span>
               ) : (
                 <span className="text-muted-foreground">Unassigned</span>
               )}
             </InfoRow>
             <InfoRow icon={Building2} label="Department">
-              <span className="capitalize">{task.department || "—"}</span>
+              {deptLabel(task.department) || "—"}
             </InfoRow>
             <InfoRow icon={CalendarDays} label="Due date">
               {due ? format(due, "EEEE, d MMMM yyyy") : "—"}
@@ -1046,9 +941,7 @@ const AgendaPanel = ({ date, dayTasks, upcoming, overdueCount, onSelect, onClose
   <>
     <div className="flex items-center justify-between gap-2 border-b px-5 py-4">
       <div>
-        <h2 className="text-base font-semibold tracking-tight">
-          {date ? format(date, "EEEE, d MMMM") : "Coming up"}
-        </h2>
+        <h2 className="text-base font-semibold tracking-tight">{date ? format(date, "EEEE, d MMMM") : "Coming up"}</h2>
         <p className="text-xs text-muted-foreground">
           {date
             ? `${dayTasks.length} task${dayTasks.length === 1 ? "" : "s"} on this day`
@@ -1075,22 +968,18 @@ const AgendaPanel = ({ date, dayTasks, upcoming, overdueCount, onSelect, onClose
       {(date ? dayTasks : upcoming).length === 0 && (
         <div className="flex flex-col items-center gap-3 px-6 py-16 text-center text-muted-foreground">
           {date ? <CalendarX2 className="h-8 w-8" /> : <MousePointerClick className="h-8 w-8" />}
-          <p className="text-sm">
-            {date ? "Nothing scheduled for this day." : "No upcoming tasks match your filters."}
-          </p>
+          <p className="text-sm">{date ? "Nothing scheduled for this day." : "No upcoming tasks match your filters."}</p>
         </div>
       )}
     </div>
   </>
 )
 
-/* -------------------------------------------------------------------------- */
-/*  Main component                                                            */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
+/*  Calendar / list view (pure UI: data and actions come from props)          */
+/* ========================================================================== */
 
-export const RenderTask = ({ onEdit, onDelete }) => {
-  const [tasks, setTasks] = useState([])
-  const [loading, setLoading] = useState(true)
+export const RenderTask = ({ tasks, loading, onComplete, onEdit, onDelete }) => {
   const [view, setView] = useState("calendar")
   const [cursor, setCursor] = useState(() => new Date())
   const [selectedId, setSelectedId] = useState(null)
@@ -1100,26 +989,6 @@ export const RenderTask = ({ onEdit, onDelete }) => {
   const [sort, setSort] = useState({ key: "due", dir: "asc" })
 
   const today = useMemo(() => startOfDay(new Date()), [])
-
-  /* ---------- Data ---------- */
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const res = await api.get("/task/get_task")
-        const data = res.data?.length || !USE_DUMMY_FALLBACK ? res.data || [] : dummyTasks
-        if (alive) setTasks(data.map(normalizeTask))
-      } catch (err) {
-        console.error("Error fetching tasks:", err)
-        if (alive && USE_DUMMY_FALLBACK) setTasks(dummyTasks.map(normalizeTask))
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -1135,11 +1004,12 @@ export const RenderTask = ({ onEdit, onDelete }) => {
   /* ---------- Derived data ---------- */
   const options = useMemo(() => {
     const uniq = (key) => [...new Set(tasks.map((t) => t[key]).filter(Boolean))].sort()
+    const plain = (arr) => arr.map((v) => ({ value: v, label: v }))
     return {
-      department: uniq("department"),
-      staff: uniq("staff"),
-      priority: ["high", "medium", "low"].filter((p) => tasks.some((t) => t.priority === p)),
-      status: ["pending", "in progress", "completed"].filter((s) => tasks.some((t) => t.status === s)),
+      department: uniq("department").map((v) => ({ value: v, label: deptLabel(v) })),
+      staff: plain(uniq("staff")),
+      priority: plain(["high", "medium", "low"].filter((p) => tasks.some((t) => t.priority === p))),
+      status: plain(["pending", "in progress", "completed"].filter((s) => tasks.some((t) => t.status === s))),
     }
   }, [tasks])
 
@@ -1147,7 +1017,6 @@ export const RenderTask = ({ onEdit, onDelete }) => {
 
   const filtered = useMemo(() => tasks.filter((t) => matchesFilters(t, filters, q)), [tasks, filters, q])
 
-  // Counts for the status tiles ignore the status filter itself, so they stay meaningful.
   const statusCounts = useMemo(() => {
     const base = tasks.filter((t) => matchesFilters(t, { ...filters, status: "all" }, q))
     return {
@@ -1216,13 +1085,18 @@ export const RenderTask = ({ onEdit, onDelete }) => {
     setSelectedDate(null)
   }
 
-  const markComplete = (id) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "completed" } : t)))
-    // TODO: persist -> api.patch(`task/${id}`, { status: "completed" })
-  }
-
   const toggleSort = (key) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }))
+
+  const handleEdit = (t) => {
+    closePanel()
+    onEdit(t)
+  }
+
+  const handleDelete = async (t) => {
+    const deleted = await onDelete(t)
+    if (deleted) closePanel()
+  }
 
   /* ---------- Render ---------- */
   const statTiles = [
@@ -1235,13 +1109,11 @@ export const RenderTask = ({ onEdit, onDelete }) => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-[1600px] p-4 lg:p-6">
-        {/* ---------------- Header ---------------- */}
+        {/* Header */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Who's doing what, and when it's due.
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">Who's doing what, and when it's due.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -1265,7 +1137,7 @@ export const RenderTask = ({ onEdit, onDelete }) => {
           </div>
         </header>
 
-        {/* ---------------- Status tiles ---------------- */}
+        {/* Status tiles */}
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {statTiles.map(({ key, label, dot }) => {
             const active = filters.status === key
@@ -1289,40 +1161,12 @@ export const RenderTask = ({ onEdit, onDelete }) => {
           })}
         </div>
 
-        {/* ---------------- Filters ---------------- */}
+        {/* Filters */}
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
-          <FilterSelect
-            icon={User}
-            value={filters.staff}
-            onChange={setFilter("staff")}
-            placeholder="Staff"
-            allLabel="All staff"
-            options={options.staff}
-          />
-          <FilterSelect
-            icon={Building2}
-            value={filters.department}
-            onChange={setFilter("department")}
-            placeholder="Department"
-            allLabel="All departments"
-            options={options.department}
-          />
-          <FilterSelect
-            icon={Flag}
-            value={filters.priority}
-            onChange={setFilter("priority")}
-            placeholder="Priority"
-            allLabel="All priorities"
-            options={options.priority}
-          />
-          <FilterSelect
-            icon={CircleDashed}
-            value={filters.status}
-            onChange={setFilter("status")}
-            placeholder="Status"
-            allLabel="All statuses"
-            options={options.status}
-          />
+          <FilterSelect icon={User} value={filters.staff} onChange={setFilter("staff")} placeholder="Staff" allLabel="All staff" options={options.staff} />
+          <FilterSelect icon={Building2} value={filters.department} onChange={setFilter("department")} placeholder="Department" allLabel="All departments" options={options.department} />
+          <FilterSelect icon={Flag} value={filters.priority} onChange={setFilter("priority")} placeholder="Priority" allLabel="All priorities" options={options.priority} />
+          <FilterSelect icon={CircleDashed} value={filters.status} onChange={setFilter("status")} placeholder="Status" allLabel="All statuses" options={options.status} />
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 justify-start text-rose-600 hover:text-rose-600 dark:text-rose-400">
               <FilterX className="mr-1.5 h-4 w-4" />
@@ -1331,20 +1175,16 @@ export const RenderTask = ({ onEdit, onDelete }) => {
           )}
         </div>
 
-        {/* ---------------- Body: content + docked right panel ---------------- */}
+        {/* Body: content + docked right panel */}
         <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-          {/* ===== Main view ===== */}
           <main className="min-w-0">
             {loading ? (
               <div className="h-[560px] animate-pulse rounded-2xl border bg-card" />
             ) : view === "calendar" ? (
               <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                {/* Month controls */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
                   <div className="flex items-center gap-2">
-                    <h2 className="min-w-[9.5rem] text-lg font-semibold tracking-tight">
-                      {format(cursor, "MMMM yyyy")}
-                    </h2>
+                    <h2 className="min-w-[9.5rem] text-lg font-semibold tracking-tight">{format(cursor, "MMMM yyyy")}</h2>
                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCursor(subMonths(cursor, 1))} aria-label="Previous month">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -1366,7 +1206,6 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                   </div>
                 </div>
 
-                {/* Weekday header */}
                 <div className="grid grid-cols-7 border-b bg-muted/40">
                   {WEEKDAYS.map((d) => (
                     <div key={d} className="py-2 text-center text-xs font-medium text-muted-foreground">
@@ -1375,7 +1214,6 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                   ))}
                 </div>
 
-                {/* Day grid */}
                 <div className="grid grid-cols-7">
                   {calendarDays.map((day, idx) => {
                     const key = format(day, "yyyy-MM-dd")
@@ -1412,17 +1250,12 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                         <span
                           className={cn(
                             "flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
-                            isToday
-                              ? "bg-primary text-primary-foreground"
-                              : inMonth
-                              ? "text-foreground"
-                              : "text-muted-foreground/60"
+                            isToday ? "bg-primary text-primary-foreground" : inMonth ? "text-foreground" : "text-muted-foreground/60"
                           )}
                         >
                           {format(day, "d")}
                         </span>
 
-                        {/* Desktop: pills */}
                         <div className="hidden flex-col gap-1 sm:flex">
                           {dayTasks.slice(0, MAX_PILLS).map((t) => (
                             <TaskPill key={t.id} task={t} selected={t.id === selectedId} onClick={selectTask} />
@@ -1434,7 +1267,6 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                           )}
                         </div>
 
-                        {/* Mobile: dots */}
                         <div className="flex flex-wrap gap-1 px-0.5 sm:hidden">
                           {dayTasks.slice(0, 4).map((t) => (
                             <span key={t.id} className={cn("h-1.5 w-1.5 rounded-full", priorityOf(t.priority).dot)} />
@@ -1482,20 +1314,15 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                           <tr
                             key={t.id}
                             onClick={() => selectTask(t)}
-                            className={cn(
-                              "cursor-pointer transition-colors hover:bg-muted/50",
-                              t.id === selectedId && "bg-primary/5"
-                            )}
+                            className={cn("cursor-pointer transition-colors hover:bg-muted/50", t.id === selectedId && "bg-primary/5")}
                           >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
                                 <span className={cn("h-8 w-1 shrink-0 rounded-full", priorityOf(t.priority).dot)} />
-                                <span className={cn("font-medium", t.status === "completed" && "line-through opacity-60")}>
-                                  {t.title}
-                                </span>
+                                <span className={cn("font-medium", t.status === "completed" && "line-through opacity-60")}>{t.title}</span>
                               </div>
                             </td>
-                            <td className="px-4 py-3 capitalize text-muted-foreground">{t.department || "—"}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{deptLabel(t.department) || "—"}</td>
                             <td className="px-4 py-3">
                               {t.staff ? (
                                 <span className="flex items-center gap-2">
@@ -1513,9 +1340,7 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                               <span className={cn(overdue && "font-medium text-rose-600 dark:text-rose-400")}>
                                 {t.dueDate ? format(parseISO(t.dueDate), "d MMM yyyy") : "—"}
                               </span>
-                              {t.dueTime && (
-                                <span className="ml-1.5 text-xs text-muted-foreground">{formatTime(t.dueTime)}</span>
-                              )}
+                              {t.dueTime && <span className="ml-1.5 text-xs text-muted-foreground">{formatTime(t.dueTime)}</span>}
                             </td>
                             <td className="px-4 py-3">
                               <StatusBadge status={t.status} />
@@ -1530,7 +1355,7 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                 {sorted.length === 0 && (
                   <div className="flex flex-col items-center gap-3 px-6 py-20 text-center text-muted-foreground">
                     <CalendarX2 className="h-8 w-8" />
-                    <p className="text-sm">No tasks match your filters.</p>
+                    <p className="text-sm">{tasks.length === 0 ? "No tasks yet. Create your first one." : "No tasks match your filters."}</p>
                     {hasActiveFilters && (
                       <Button variant="outline" size="sm" onClick={clearFilters}>
                         Clear filters
@@ -1542,10 +1367,8 @@ export const RenderTask = ({ onEdit, onDelete }) => {
             )}
           </main>
 
-          {/* ===== Docked right panel (bottom sheet on small screens) ===== */}
-          {hasSelection && (
-            <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] xl:hidden" onClick={closePanel} />
-          )}
+          {/* Docked right panel (bottom sheet on small screens) */}
+          {hasSelection && <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] xl:hidden" onClick={closePanel} />}
           <aside
             className={cn(
               "z-40 flex-col overflow-hidden border bg-card shadow-2xl",
@@ -1559,9 +1382,9 @@ export const RenderTask = ({ onEdit, onDelete }) => {
                 task={selectedTask}
                 today={today}
                 onClose={closePanel}
-                onComplete={markComplete}
-                onEdit={onEdit}
-                onDelete={onDelete}
+                onComplete={onComplete}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
               />
             ) : (
               <AgendaPanel
@@ -1579,4 +1402,3 @@ export const RenderTask = ({ onEdit, onDelete }) => {
     </div>
   )
 }
-

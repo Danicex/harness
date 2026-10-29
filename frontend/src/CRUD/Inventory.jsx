@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoaderCircle, X } from 'lucide-react';
+import { currency } from '@/lib/currency';
 
 export function CreateInventory({ setNewInventory, setReload, reload}) {
   const { admin_id } = useMyContext();
@@ -159,7 +160,7 @@ export function CreateInventory({ setNewInventory, setReload, reload}) {
 
             <div>
               <Label htmlFor="price">Price</Label>
-              <Input type="number" name="price" value={productData.price} onChange={handleChange} required placeholder='$20' />
+              <Input type="number" name="price" value={productData.price} onChange={handleChange} required placeholder={`${currency} 20`} />
             </div>
 
             <div>

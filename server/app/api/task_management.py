@@ -1,30 +1,18 @@
 # CRUD task  ->  app/routers/task.py
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
+from sqlmodel import select
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-
-from app.auth.authentication import isAuthorized
-from app.crud import create_data, delete_data, get_admin_data, get_single_data, update_data
+from app.auth.authentication import AuthUser, require_admin, require_staff
+from app.crud import create_data, delete_data, get_admin_data, get_single_data, update_data, get_staff_data
 from app.database import SessionDep
-from app.model import TaskCreate, TaskUpdate
+from app.model import TaskCreate, TaskUpdate, Task
 
 router = APIRouter(prefix="/task", tags=["tasks"])
 
 
-# ---------- shared helpers (replaces the auth block repeated in every blog endpoint) ----------
-def require_admin(authorization: str = Header(...)) -> dict:
-    try:
-        token = authorization.split(" ")[1]
-    except IndexError:
-        raise HTTPException(status_code=401, detail="Not authorized")
-
-    auth = isAuthorized(token)
-    if not auth or auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    return auth
-
-
+# ---------- shared helpers ----------
 AdminDep = Annotated[dict, Depends(require_admin)]
 
 
@@ -42,9 +30,9 @@ def get_owned_task(task_id: int, admin_id: int, session):
 def create_task(payload: TaskCreate, session: SessionDep, auth: AdminDep):
     task_dict = payload.model_dump()
     task_dict["admin_id"] = auth.get("admin_id")
-    task_dict["created_at"] = datetime.utcnow()
-    task_dict["updated_at"] = datetime.utcnow()
-
+    task_dict["created_at"] = datetime.now(timezone.utc)
+    task_dict["updated_at"] = datetime.now(timezone.utc)
+    
     success, task = create_data("task", task_dict, session)
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create task")
@@ -56,6 +44,18 @@ def create_task(payload: TaskCreate, session: SessionDep, auth: AdminDep):
 def read_tasks(session: SessionDep, auth: AdminDep):
     # Always return a list: the React calendar calls .map() on this response
     return get_admin_data(auth["admin_id"], "task", session) or []
+
+
+@router.get("/get_staff_task")
+def get_staff_task(session: SessionDep, user: AuthUser = Depends(require_staff)):
+    staff_id = user["staff_id"] # AuthUser is an object, not a dict (see note below)
+
+    statement = select(Task).where(
+        Task.admin_id == user["admin_id"],                      # tenant scoping
+        Task.assigned_staff.contains({"id": staff_id}),      # jsonb @> '{"id": 1}'
+    )
+    return session.exec(statement).all()
+
 
 
 @router.get("/{task_id}")
@@ -72,7 +72,7 @@ def update_task(task_id: int, payload: TaskUpdate, session: SessionDep, auth: Ad
     task_dict = payload.model_dump(exclude_unset=True, exclude_none=True)
     if not task_dict:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
-    task_dict["updated_at"] = datetime.utcnow()
+    task_dict["updated_at"] = datetime.now(timezone.utc)
 
     success, updated_task = update_data("task", task_id, task_dict, session)
     if not success:

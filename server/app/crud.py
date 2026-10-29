@@ -2,7 +2,7 @@ from typing import Optional
 from app.database import SessionDep
 from sqlmodel import select, and_, desc, func
 from sqlalchemy.sql import extract
-from app.model import Admin, Product, HotelProfile, Sales, Staff, Booking, Customer, Inbox, Blog, Dataset, CallLog, Room, HotelProfile, Attendance, Task
+from app.model import Admin, Product, HotelProfile, Sales, Staff, Booking, Customer, Inbox, Blog, Dataset, CallLog, Room, HotelProfile, Attendance, Task, AdminCredentials
 from datetime import datetime, timedelta
 
 obj_map = {
@@ -21,6 +21,7 @@ obj_map = {
     "call_log": CallLog,
     "dataset": Dataset,
     "task": Task,
+    "admin_credentials":AdminCredentials
 }
 
 def read_data(obj_name: str, session: SessionDep, limit: int = 100):
@@ -33,6 +34,15 @@ def read_data(obj_name: str, session: SessionDep, limit: int = 100):
     
     data = session.exec(
         select(model_class).limit(limit)
+    ).all()
+    return data
+
+def read_admin_data(admin_id:int , obj_name: str, session: SessionDep, limit: int = 100):
+    model_class = obj_map.get(obj_name.lower())
+    if not model_class:
+        return None
+    data = session.exec(
+        select(model_class).where(model_class.admin_id == admin_id)
     ).all()
     return data
 
@@ -171,3 +181,17 @@ def get_data_by_period(
     result = session.exec(query).all()
     return result
 
+def get_staff_data(
+    staff_id: int,
+    model_name: str,
+    session: SessionDep
+):
+    model_class = obj_map.get(model_name.lower())
+    if not model_class:
+        return None
+    
+    data = session.exec(
+        select(model_class).where(model_class.staff_id == staff_id)
+    ).all()
+    return data
+    

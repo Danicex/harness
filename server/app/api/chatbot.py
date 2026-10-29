@@ -1,18 +1,18 @@
 import logging
 import os
 from typing import Any, Dict, List, Optional
-
+import json
 import redis
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.encoders import jsonable_encoder
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import select
 
-from app.crud import get_admin_data
+from app.crud import get_admin_data, create_data, read_admin_data
 from app.database import SessionDep
 from app.model import Dataset
-from app.auth.authentication import isAuthorized  # adjust to wherever isAuthorized lives
+from app.auth.authentication import AuthUser, require_admin as require_admin_user
 from app.utils.toon import toon_encode
 
 logger = logging.getLogger(__name__)
@@ -43,9 +43,9 @@ def invalidate_context(admin_id: int) -> None:
 def build_context(admin_id: int, session: SessionDep) -> str:
     """Fetch from DB and compress with toon. Only runs on cache miss."""
     data_set: Dict[str, Any] = {
-        "rooms": get_admin_data("room_data", admin_id, session),
-        "hotel_info": get_admin_data("hotel_information", admin_id, session),
-        "custom_dataset": get_admin_data("dataset", admin_id, session),
+        "rooms": read_admin_data( admin_id,"room", session),
+        "hotel_info": read_admin_data( admin_id,"hotel_profile", session),
+        "custom_dataset": read_admin_data(admin_id,"dataset",  session),
     }
     return toon_encode(jsonable_encoder(data_set))
 
@@ -69,15 +69,9 @@ def get_context(admin_id: int, session: SessionDep) -> str:
 # ==========================================
 # AUTH
 # ==========================================
-def require_admin(authorization: str = Header(...)) -> int:
-    try:
-        token = authorization.split(" ")[1]
-    except IndexError:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    auth = isAuthorized(token)
-    if not auth or auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
-    return auth["admin_id"]
+def require_admin(user: AuthUser = Depends(require_admin_user)) -> int:
+    """Tenant id of the logged-in admin."""
+    return user["admin_id"]
 
 
 # ==========================================
@@ -120,64 +114,82 @@ def chat(payload: ChatPayload, session: SessionDep):
 # ==========================================
 # DATASET CRUD (one dataset per admin, admin_id is unique)
 # ==========================================
-class Intent(BaseModel):
+
+# ---------- schemas ----------
+class IntentItem(BaseModel):
     question: str
     answer: str
-
-
+ 
+ 
 class DatasetIn(BaseModel):
     title: str
     description: Optional[str] = None
-    intent: List[Intent] = []
-
-
-def _get_or_404(session: SessionDep, admin_id: int) -> Dataset:
-    ds = session.exec(select(Dataset).where(Dataset.admin_id == admin_id)).first()
-    if not ds:
-        raise HTTPException(status_code=404, detail="Dataset not found")
+    intent: List[IntentItem] = []
+ 
+ 
+class DatasetOut(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    intent: List[IntentItem] = []
+ 
+ 
+# ---------- helpers ----------
+def get_owned(session, dataset_id: int, auth: AuthUser) -> Dataset:
+    ds = session.get(Dataset, dataset_id)
+    if not ds or ds.admin_id != auth:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dataset not found")
     return ds
-
-
-@router.get("/dataset")
-def read_dataset(session: SessionDep, admin_id: int = Depends(require_admin)):
-    return _get_or_404(session, admin_id)
-
-
-@router.post("/dataset", status_code=status.HTTP_201_CREATED)
-def create_dataset(payload: DatasetIn, session: SessionDep, admin_id: int = Depends(require_admin)):
-    exists = session.exec(select(Dataset).where(Dataset.admin_id == admin_id)).first()
-    if exists:
-        raise HTTPException(status_code=409, detail="Dataset already exists, update it instead")
+ 
+ 
+# ---------- routes ----------
+@router.get("/dataset", response_model=List[DatasetOut])
+def list_datasets(session: SessionDep, auth: AuthUser = Depends(require_admin)):
+    # admin_id = auth
+    print(auth)
+    stmt = select(Dataset).where(Dataset.admin_id == auth).order_by(Dataset.id.desc())
+    return session.exec(stmt).all()
+ 
+ 
+@router.get("/dataset/{dataset_id}", response_model=DatasetOut)
+def get_dataset(dataset_id: int, session: SessionDep, auth: AuthUser = Depends(require_admin)):
+    return get_owned(session, dataset_id, auth)
+ 
+ 
+@router.post("/dataset", response_model=DatasetOut, status_code=status.HTTP_201_CREATED)
+def create_dataset(payload: DatasetIn, session: SessionDep, auth: AuthUser = Depends(require_admin)):
     ds = Dataset(
-        admin_id=admin_id,
+        admin_id=auth,
         title=payload.title,
         description=payload.description,
-        intent=[i.model_dump() for i in payload.intent],
+        intent=[i.model_dump() for i in payload.intent],  # .dict() on Pydantic v1
     )
     session.add(ds)
     session.commit()
     session.refresh(ds)
-    invalidate_context(admin_id)
     return ds
-
-
-@router.put("/dataset")
-def update_dataset(payload: DatasetIn, session: SessionDep, admin_id: int = Depends(require_admin)):
-    ds = _get_or_404(session, admin_id)
+ 
+ 
+@router.put("/dataset/{dataset_id}", response_model=DatasetOut)
+def update_dataset(
+    dataset_id: int,
+    payload: DatasetIn,
+    session: SessionDep,
+    auth: AuthUser = Depends(require_admin),
+):
+    ds = get_owned(session, dataset_id, auth)
     ds.title = payload.title
     ds.description = payload.description
-    ds.intent = [i.model_dump() for i in payload.intent]  # reassign so JSON change is detected
+    ds.intent = [i.model_dump() for i in payload.intent]  # assign a new list so the JSON change is detected
     session.add(ds)
     session.commit()
     session.refresh(ds)
-    invalidate_context(admin_id)
     return ds
-
-
-@router.delete("/dataset")
-def delete_dataset(session: SessionDep, admin_id: int = Depends(require_admin)):
-    ds = _get_or_404(session, admin_id)
+ 
+ 
+@router.delete("/dataset/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_dataset(dataset_id: int, session: SessionDep, auth: AuthUser = Depends(require_admin)):
+    ds = get_owned(session, dataset_id, auth)
     session.delete(ds)
     session.commit()
-    invalidate_context(admin_id)
-    return {"message": "Dataset deleted"}
+ 

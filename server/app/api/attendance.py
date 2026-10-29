@@ -1,12 +1,12 @@
 import json
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import select
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_current_user, require_staff
 from app.crud import create_data, get_data_by_period
 from app.database import SessionDep
 from app.redis import redis_client
@@ -23,21 +23,6 @@ def generate_otp(length: int = 6) -> str:
 
 def _code_key(code: str) -> str:
     return f"attendance:code:{code}"
-
-
-def _get_bearer_token(authorization: str) -> str:
-    parts = authorization.split(" ")
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Invalid authorization header")
-    return parts[1]
-
-
-def _authorize(authorization: str) -> dict:
-    token = _get_bearer_token(authorization)
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    return auth
 
 
 async def _store_new_code() -> str:
@@ -74,13 +59,9 @@ async def get_current_code():
 async def create_attendance(
     payload: AttendancePayload,
     session: SessionDep,
-    authorization: str = Header(...),
+    auth: AuthUser = Depends(require_staff),
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    staff_id = auth.get("staff_id") or auth.get("user_id")
+    staff_id = auth["staff_id"]
     admin_id = auth.get("admin_id")
 
     if payload.status not in ("check_in", "check_out"):
@@ -98,16 +79,16 @@ async def create_attendance(
     if current == payload.verification_code:
         await redis_client.delete(CURRENT_CODE_KEY)
         
-    staff_data = session.exec(
-    select(Staff).where(Staff.id == staff_id)
-    ).first() 
+    staff_data = session.exec(select(Staff).where(Staff.id == staff_id)).first()
+    if not staff_data:
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     attendance_dict = {
         "staff_id": staff_id,
         "admin_id": admin_id,
         "name": staff_data.name,
         "status": payload.status,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     }
     record = create_data("attendance", attendance_dict, session)
 
@@ -121,9 +102,8 @@ async def create_attendance(
 async def get_attendance_by_month(
     month: str,
     session: SessionDep,
-    authorization: str = Header(...),
+    auth: AuthUser = Depends(get_current_user),
 ):
-    auth = _authorize(authorization)
     return get_data_by_period(auth["admin_id"], "attendance", session, period=month)
 
 
@@ -131,7 +111,6 @@ async def get_attendance_by_month(
 async def get_attendance_by_date(
     date: str,
     session: SessionDep,
-    authorization: str = Header(...),
+    auth: AuthUser = Depends(get_current_user),
 ):
-    auth = _authorize(authorization)
     return get_data_by_period(auth["admin_id"], "attendance", session, date=date)

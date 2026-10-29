@@ -2,6 +2,7 @@ import { formatDate } from 'date-fns';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { API_ENDPOINT } from '@/lib/api';
+import { currency } from '@/lib/currency';
 
 const GlobalContext = createContext();
 
@@ -28,8 +29,7 @@ export function AppDataProvider({ children }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [admin_id, setAdminId] = useState(localStorage.getItem('admin_id') || {});
   const [token, setToken] = useState(localStorage.getItem('token') || {})
-  const [user_role, setUserRole] = useState(localStorage.getItem('user_role') || null )
-
+  const [user_role, setUserRole] = useState(localStorage.getItem('user_role') || null)
   const [sub, setSub] = useState(false)
 
   // api_endpoint kept for any older code still reading it from context;
@@ -58,7 +58,7 @@ export function AppDataProvider({ children }) {
     setThemeState(value);
   }, []);
 
-//navigate to dashboard after login
+  //navigate to dashboard after login
   const login = async (email, password, role) => {
     //handle login
     try {
@@ -70,6 +70,11 @@ export function AppDataProvider({ children }) {
         setToken(x.token)
         setAdminId(x.admin_id)
         setUserRole(x.role)
+        const userId = admin_id || staff_id;
+
+        if (userId) {
+          localStorage.setItem('user_id', userId);
+        }
         localStorage.setItem('admin_id', x.admin_id)
         localStorage.setItem('user_role', x.role)
         localStorage.setItem('token', x.token)
@@ -79,12 +84,12 @@ export function AppDataProvider({ children }) {
       navigate("/")
       setAuthenticated(false)
     }
-    
+
   }
   //navigate to login after signin
-  
 
-  const logout = ()=>{
+
+  const logout = () => {
     localStorage.removeItem('admin_id')
     localStorage.removeItem('token')
     localStorage.removeItem('user_role')
@@ -94,30 +99,31 @@ export function AppDataProvider({ children }) {
 
 
 
-const get_admin_profile = async () => {
-  try {
-    const response = await api.get(`/hotel_profile/get_hotel_profile`);
-    console.log("profile info:",response.data)
-   if (!response.data ){
-      navigate('/profile');
-      return;
-    }
-    
-  } catch (err) {
-    console.error('Error fetching admin profile:', err);
-    navigate('/profile');
-  }
-};
+  const get_admin_profile = async () => {
+    try {
+      const response = await api.get(`/hotel_profile/get_hotel_profile`);
+      console.log("profile info:", response.data)
+      if (!response.data) {
+        navigate('/profile');
+        return;
+      }
 
-const get_sub_status = async () => {
+    } catch (err) {
+      console.error('Error fetching admin profile:', err);
+      navigate('/profile');
+    }
+  };
+
+const get_sub_status = useCallback(async () => {
+  if (!admin_id) return null; // not ready yet; ProtectedRoute keeps waiting
   try {
-    const res = await api.get(`/admin/${admin_id}/subscription`);
-    return res.data.is_active;
+    const res = await api.get(`/admin/${admin_id}/subscription/status`);
+    return res.data.is_subscribed;
   } catch (error) {
     console.error("Error fetching subscription status:", error);
-    return false; // or handle error appropriately
+    return false;
   }
-};
+}, [admin_id]);
 
   return (
     <GlobalContext.Provider value={{
@@ -133,7 +139,8 @@ const get_sub_status = async () => {
       logout,
       get_admin_profile,
       get_sub_status,
-      user_role
+      user_role,
+      currency
     }}>
       {children}
     </GlobalContext.Provider>

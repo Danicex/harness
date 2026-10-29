@@ -1,11 +1,11 @@
 # CRUD blog
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import Blog
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, require_admin
 from app.services.upload import handle_file_upload
 
 router = APIRouter(prefix="/blog", tags=["blogs"])
@@ -18,14 +18,8 @@ async def create_blog(
     description: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Handle file uploads
@@ -45,7 +39,7 @@ async def create_blog(
             "description": description,
             "image_url": image_url,
             "video_url": video_url,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         
         success, blog = create_data("blog", blog_dict, session)
@@ -68,17 +62,31 @@ async def create_blog(
 @router.get("/get_blogs")        
 def read_blog(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         blogs = get_admin_data(auth["admin_id"], "blog", session)
+        
+        if not blogs:
+            return {"message": "No blogs found", "blogs": []}
+        
+        return blogs
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving blogs: {str(e)}"
+        )
+        
+@router.get("/public_blog/{admin_id}")        
+def read_blog(
+    admin_id: int,
+    session: SessionDep,
+):
+    try:
+        blogs = get_admin_data(admin_id, "blog", session)
         
         if not blogs:
             return {"message": "No blogs found", "blogs": []}
@@ -96,14 +104,8 @@ def read_blog(
 def get_single_blog(
     session: SessionDep,
     blog_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         blog = get_single_data(blog_id, "blog", session)
@@ -132,14 +134,8 @@ def update_blog(
     description: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing blog
@@ -199,14 +195,8 @@ def update_blog(
 def delete_blog(
     session: SessionDep,
     blog_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing blog

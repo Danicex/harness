@@ -1,11 +1,11 @@
 # CRUD room
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Query, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import Room
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_optional_user, require_admin
 from app.services.upload import handle_file_upload
 
 router = APIRouter(prefix="/room", tags=["rooms"])
@@ -20,14 +20,8 @@ async def create_room(
     room_status: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     pictures: Optional[list[UploadFile]] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Handle main image upload
@@ -53,7 +47,7 @@ async def create_room(
             "status": room_status,
             "image_url": image_url,
             # "pictures": pictures_urls,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         
         success, room = create_data("room", room_dict, session)
@@ -78,15 +72,11 @@ async def create_room(
 def read_rooms(
     session: SessionDep,
     admin_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None)
+    auth: Optional[AuthUser] = Depends(get_optional_user),
 ):
     resolved_admin_id = admin_id
 
-    if authorization:
-        token = authorization.split(" ")[1]
-        auth = isAuthorized(token)
-        if not auth:
-            raise HTTPException(status_code=401, detail="Not authorized")
+    if auth:
         resolved_admin_id = auth["admin_id"]  # token wins over query param
 
     if not resolved_admin_id:
@@ -114,14 +104,8 @@ def read_rooms(
 def get_single_room(
     session: SessionDep,
     room_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         room = get_single_data(room_id, "room", session)
@@ -153,14 +137,8 @@ async def update_room(
     room_type: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     pictures: Optional[list[UploadFile]] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing room
@@ -229,14 +207,8 @@ async def update_room(
 def delete_room(
     session: SessionDep,
     room_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Get existing room

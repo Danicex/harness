@@ -1,192 +1,434 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
-from app.crud import create_data, update_data, get_single_data
-from app.model import Admin, Staff, AdminCredentials
-from typing import Optional, Dict, Any
-import os
-from passlib.context import CryptContext
-from jose import jwt, JWTError
-from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta
-from sqlmodel import Session, select
-from app.database import engine
-from typing import List, Union
-import random
+"""
+Authentication for hotel admins and staff.
+
+Model
+-----
+* Two account types, stored in two tables: ``Admin`` (the hotel owner / tenant)
+  and ``Staff`` (belongs to exactly one admin).
+* The account TYPE ("admin" | "staff") decides what you may do.  The staff
+  job ROLE ("receptionist", "manager", ...) is free text managed by the admin and
+  is only used by ``require_roles``.  A staff member can never become an admin,
+  whatever string is stored in ``Staff.role``.
+* Every authenticated request resolves to one ``AuthUser`` dict.  ``admin_id`` is
+  ALWAYS set (for staff it is their employer), so it is the tenant key to scope
+  every query with.
+
+Token
+-----
+JWT (HS256) with claims: ``sub`` = account id, ``typ`` = "admin" | "staff",
+``role``, ``iat``, ``exp``, ``jti``.  The token is also stored in
+``<table>.jwt_token`` and must match on every request, so logging in again,
+logging out, resetting a password or editing a staff member's credentials
+revokes the previous session (one active session per account).
+
+Use in routers
+--------------
+    auth: AuthUser = Depends(require_admin)       # admins only
+    auth: AuthUser = Depends(require_staff)       # staff only
+    auth: AuthUser = Depends(get_current_user)    # admin or staff
+    auth: Optional[AuthUser] = Depends(get_optional_user)   # public + optional login
+    auth: AuthUser = Depends(require_roles("manager", "supervisor"))
+"""
+import hashlib
 import json
+import logging
+import os
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Literal, Optional, TypedDict
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
+
+from app.database import SessionDep, engine
+from app.model import Admin, AdminCredentials, Staff
 from app.redis import redis_client
 from app.services.mailer import send_mail
-import secrets
-from jose.exceptions import JWTError, ExpiredSignatureError
 
-# define all auth routes
-router = APIRouter(prefix="/auth", tags=["authentication"])
-# config 
-REDIS_PORT = os.getenv("REDIS_PORT")
-ACCESS_TOKEN_EXPIRE_DAYS = 30
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set")
+
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", "30"))
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+RESET_TOKEN_TTL = timedelta(hours=1)
+MIN_PASSWORD_LENGTH = 8
 
+ADMIN = "admin"
+STAFF = "staff"
 
+router = APIRouter(prefix="/auth", tags=["authentication"])
+bearer_scheme = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Pydantic models for request/response
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+class AuthUser(TypedDict):
+    user_id: int                          # Admin.id or Staff.id
+    account_type: Literal["admin", "staff"]
+    email: str
+    role: str                             # "admin" for admins, job role for staff
+    admin_id: int                         # tenant key, always set
+    staff_id: Optional[int]               # None for admins
+
+
+# ---------------------------------------------------------------------------
+# Passwords
+# ---------------------------------------------------------------------------
+def _bcrypt_input(password: str) -> bytes:
+    # bcrypt only looks at the first 72 bytes; do it the same way everywhere
+    return password.encode("utf-8")[:72]
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(_bcrypt_input(password))
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return pwd_context.verify(_bcrypt_input(plain_password), hashed_password)
+    except (ValueError, TypeError):
+        return False
+
+
+# verified against when the email is unknown, so "no such user" and "wrong
+# password" take the same time
+_DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+
+
+# ---------------------------------------------------------------------------
+# Tokens
+# ---------------------------------------------------------------------------
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _tokens_equal(stored: Optional[str], presented: str) -> bool:
+    return bool(stored) and secrets.compare_digest(stored.encode(), presented.encode())
+
+
+def create_access_token(*, user_id: int, account_type: str, role: str) -> str:
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": str(user_id),
+        "typ": account_type,
+        "role": role,
+        "iat": now,
+        "exp": now + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS),
+        "jti": uuid.uuid4().hex,
+    }
+    return jwt.encode(claims, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def _staff_role(staff: Staff) -> str:
+    role = (staff.role or STAFF).strip().lower()
+    # "admin" is reserved for the Admin table; never let a staff row claim it
+    return STAFF if role in ("", ADMIN) else role
+
+
+def _inactive(status_value: Optional[str]) -> bool:
+    return (status_value or "active") != "active"
+
+
+def authenticate_token(token: str, session: Session) -> AuthUser:
+    """Validate a bearer token and return the account it belongs to.
+
+    Raises HTTPException (401 bad/expired/revoked token, 403 suspended account).
+    """
+    try:
+        claims = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"require_exp": True, "require_sub": True},
+        )
+    except ExpiredSignatureError:
+        raise _unauthorized("Token has expired")
+    except JWTError:
+        raise _unauthorized("Invalid token")
+
+    try:
+        user_id = int(claims["sub"])
+    except (KeyError, TypeError, ValueError):
+        raise _unauthorized("Invalid token")
+
+    account_type = claims.get("typ")
+
+    if account_type == ADMIN:
+        admin = session.get(Admin, user_id)
+        if not admin or not _tokens_equal(admin.jwt_token, token):
+            raise _unauthorized("Session is no longer valid, please log in again")
+        if _inactive(admin.account_status):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This account is not active")
+        return AuthUser(
+            user_id=admin.id,
+            account_type=ADMIN,
+            email=admin.email,
+            role=ADMIN,
+            admin_id=admin.id,
+            staff_id=None,
+        )
+
+    if account_type == STAFF:
+        # inner join: a staff row without an employer can never authenticate
+        row = session.exec(
+            select(Staff, Admin.account_status)
+            .join(Admin, Admin.id == Staff.admin_id)
+            .where(Staff.id == user_id)
+        ).first()
+        if not row:
+            raise _unauthorized("Session is no longer valid, please log in again")
+        staff, employer_status = row
+        if not _tokens_equal(staff.jwt_token, token):
+            raise _unauthorized("Session is no longer valid, please log in again")
+        if _inactive(employer_status):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This hotel account is not active")
+        return AuthUser(
+            user_id=staff.id,
+            account_type=STAFF,
+            email=staff.email,
+            role=_staff_role(staff),
+            admin_id=staff.admin_id,
+            staff_id=staff.id,
+        )
+
+    raise _unauthorized("Invalid token")
+
+
+# ---------------------------------------------------------------------------
+# FastAPI dependencies
+# ---------------------------------------------------------------------------
+def get_optional_user(
+    session: SessionDep,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> Optional[AuthUser]:
+    """No Authorization header -> None.  A header that is present must be valid."""
+    if credentials is None:
+        return None
+    return authenticate_token(credentials.credentials, session)
+
+
+def get_current_user(user: Optional[AuthUser] = Depends(get_optional_user)) -> AuthUser:
+    """Any logged-in admin or staff member."""
+    if user is None:
+        raise _unauthorized("Not authenticated")
+    return user
+
+
+def require_admin(user: AuthUser = Depends(get_current_user)) -> AuthUser:
+    if user["account_type"] != ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
+    return user
+
+
+def require_staff(user: AuthUser = Depends(get_current_user)) -> AuthUser:
+    if user["account_type"] != STAFF:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Staff access required")
+    return user
+
+
+def require_roles(*allowed: str):
+    """Allow only the listed roles.  Admins pass only if "admin" is listed."""
+    allowed_roles = {r.strip().lower() for r in allowed}
+
+    def checker(user: AuthUser = Depends(get_current_user)) -> AuthUser:
+        if user["role"] not in allowed_roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+        return user
+
+    return checker
+
+
+def get_current_admin_id(user: AuthUser = Depends(get_current_user)) -> int:
+    """The tenant id for whoever is logged in (an admin's own id, or a staff member's employer)."""
+    return user["admin_id"]
+
+
+def isAuthorized(token: str) -> Optional[Dict[str, Any]]:
+    """Deprecated: kept so code outside this package keeps importing.  Use the dependencies."""
+    with Session(engine) as session:
+        try:
+            return dict(authenticate_token(token, session))
+        except HTTPException:
+            return None
+
+
+def get_admin_cred(admin_id: int, session: Session) -> AdminCredentials:
+    """The admin's messaging credentials (SMS / mail keys)."""
+    credentials = session.exec(
+        select(AdminCredentials).where(AdminCredentials.admin_id == admin_id)
+    ).first()
+    if not credentials:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Messaging credentials are not configured for this account"
+        )
+    return credentials
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
 class LoginData(BaseModel):
     email: EmailStr
     password: str
-    role: str
+    # "admin" logs in against the Admin table; anything else (or nothing) against Staff
+    role: Optional[str] = None
+
 
 class AdminSignUp(BaseModel):
     email: EmailStr
-    password: str
-    role: str 
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+    role: Optional[str] = None  # accepted for older clients, ignored: admins are always "admin"
+
 
 class TokenResponse(BaseModel):
     token: str
-    token_type: str
+    token_type: str = "bearer"
     email: str
     role: str
-    admin_id: Optional[int] = None  # Make optional
-    staff_id: Optional[int] = None 
+    admin_id: Optional[int] = None
+    staff_id: Optional[int] = None
 
-def get_admin_cred(token):
-    auth = isAuthorized(token)
-    admin_id = auth.get("admin_id")
-    with Session(engine) as session:
-        credentials = session.exec(
-                select(AdminCredentials).where(Admin.id == admin_id)
-            ).first()
-    return credentials
-
-# login admin
-@router.post('/login', response_model=TokenResponse)
-async def login(user_data: LoginData):
-    # Find user by email based on role
-    with Session(engine) as session:
-        user = None
-        role = user_data.role.lower()  # Normalize role to lowercase
-        
-        if role == "admin":
-            user = session.exec(
-                select(Admin).where(Admin.email == user_data.email)
-            ).first()
-            user_role = "admin" 
-        else:
-            user = session.exec(
-                select(Staff).where(Staff.email == user_data.email)
-            ).first()
-            user_role = user.role if user else None
-        
-        # Check if user exists
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
-            )
-        
-        # Verify password
-        if not verify_password(user_data.password, user.password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
-            )
-        
-        # Create JWT token with appropriate role
-        token = create_jwt_token(user.email, user_role)
-        
-        # Update user's jwt_token in database
-        user.jwt_token = token
-        session.add(user)
-        session.commit()
-        
-        # Return appropriate response based on role
-        response_data = {
-            "token": token,
-            "token_type": "bearer",
-            "email": user.email,
-            "role": user_role,
-        }
-        
-        # Add role-specific ID to response
-        if role == "admin":
-            response_data["admin_id"] = user.id
-        else:
-            response_data["staff_id"] = user.id
-        
-        return response_data
-    
-# sign up admin
-@router.post('/signup')
-async def sign_up(admin_data: AdminSignUp):
-    # Check if admin already exists
-    with Session(engine) as session:
-        existing_admin = session.exec(
-            select(Admin).where(Admin.email == admin_data.email)
-        ).first()
-        
-        if existing_admin:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Admin with this email already exists"
-            )
-        
-        # Hash password
-        hashed_password = hash_password(admin_data.password)
-        
-        # Create new admin
-        new_admin = Admin(
-            email=admin_data.email,
-            password=hashed_password,
-            role=admin_data.role,
-            jwt_token=""  # Will be set after login
-        )
-        
-        session.add(new_admin)
-        session.commit()
-        session.refresh(new_admin)
-        
-        # Create JWT token
-        token = create_jwt_token(new_admin.email, "admin")
-        
-        # Update admin's jwt_token
-        new_admin.jwt_token = token
-        session.add(new_admin)
-        session.commit()
-        
-        return {
-            "token": token,
-            "token_type": "bearer",
-            "email": new_admin.email,
-            "admin_id": new_admin.id,
-            "role": new_admin.role,
-        }
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
-    
-@router.post('/send_reset_password_link' )
-async def send_reset_password_link(request: PasswordResetRequest):
-    with Session(engine) as session:
-        admin = session.exec(
-            select(Admin).where(Admin.email == request.email)
-        ).first()
-        
-    if not admin:
-        return {
-            "message": "If an account exists with this email, a password reset link has been sent."
-        }
-    reset_token = secrets.token_urlsafe(32)
-    token_expiry = datetime.utcnow() + timedelta(hours=1)
-    
-    admin.reset_password_token = reset_token
-    admin.reset_password_expiry = token_expiry
-    admin.updated_at = datetime.utcnow()
-    
-    session.add(admin)
+
+
+class ResetPassword(BaseModel):
+    email: EmailStr
+    token: str
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+@router.post("/login", response_model=TokenResponse)
+def login(data: LoginData, session: SessionDep):
+    as_admin = (data.role or "").strip().lower() == ADMIN
+    model = Admin if as_admin else Staff
+    account = session.exec(select(model).where(model.email == data.email)).first()
+
+    password_ok = verify_password(data.password, account.password if account else _DUMMY_HASH)
+    if not account or not password_ok:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
+
+    if as_admin:
+        if _inactive(account.account_status):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This account is not active")
+        role, admin_id, staff_id = ADMIN, account.id, None
+    else:
+        employer = session.get(Admin, account.admin_id) if account.admin_id else None
+        if not employer:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This staff account is not linked to a hotel")
+        if _inactive(employer.account_status):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This hotel account is not active")
+        role, admin_id, staff_id = _staff_role(account), account.admin_id, account.id
+
+    token = create_access_token(
+        user_id=account.id, account_type=ADMIN if as_admin else STAFF, role=role
+    )
+    account.jwt_token = token  # replaces any previous session
+    session.add(account)
     session.commit()
-    
-    frontend_url = "http://localhost:5173" 
-    reset_link = f"{frontend_url}/password_reset?token={reset_token}&email={request.email}"
-    subject = "Reset Your Password"
-    html_content = f"""
+
+    return TokenResponse(
+        token=token, email=account.email, role=role, admin_id=admin_id, staff_id=staff_id
+    )
+
+
+@router.post("/signup", response_model=TokenResponse)
+def sign_up(data: AdminSignUp, session: SessionDep):
+    if session.exec(select(Admin).where(Admin.email == data.email)).first():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Admin with this email already exists")
+
+    admin = Admin(email=data.email, password=hash_password(data.password), role=ADMIN)
+    session.add(admin)
+    try:
+        session.flush()  # assigns admin.id
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Admin with this email already exists")
+
+    token = create_access_token(user_id=admin.id, account_type=ADMIN, role=ADMIN)
+    admin.jwt_token = token
+    session.commit()
+
+    return TokenResponse(token=token, email=admin.email, role=ADMIN, admin_id=admin.id)
+
+
+@router.post("/logout")
+def logout(session: SessionDep, user: AuthUser = Depends(get_current_user)):
+    """Revoke the current session server-side."""
+    model = Admin if user["account_type"] == ADMIN else Staff
+    account = session.get(model, user["user_id"])
+    if account:
+        account.jwt_token = None
+        session.add(account)
+        session.commit()
+    return {"message": "Logged out"}
+
+
+@router.get("/me")
+def me(user: AuthUser = Depends(get_current_user)):
+    return user
+
+
+# --- password reset (admins) -------------------------------------------------
+# The reset link carries a short-lived signed token (typ="reset"): nothing is stored
+# in the database.  It embeds a fingerprint of the current password hash, so it stops
+# working the moment the password changes (single use) and can never be used as a login
+# token (authenticate_token only accepts typ "admin" / "staff").
+_RESET_MESSAGE = "If an account exists with this email, a password reset link has been sent."
+
+
+def _password_fingerprint(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:24]
+
+
+def _create_reset_token(admin: Admin) -> str:
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "sub": str(admin.id),
+            "typ": "reset",
+            "pwf": _password_fingerprint(admin.password),
+            "iat": now,
+            "exp": now + RESET_TOKEN_TTL,
+            "jti": uuid.uuid4().hex,
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+@router.post("/send_reset_password_link")
+async def send_reset_password_link(request: PasswordResetRequest, session: SessionDep):
+    admin = session.exec(select(Admin).where(Admin.email == request.email)).first()
+    if not admin:
+        return {"message": _RESET_MESSAGE}
+
+    reset_link = f"{FRONTEND_URL}/password_reset?token={_create_reset_token(admin)}&email={request.email}"
+    html = f"""
     <html>
         <body>
             <h1>Password Reset Request</h1>
@@ -200,191 +442,82 @@ async def send_reset_password_link(request: PasswordResetRequest):
         </body>
     </html>
     """
+    try:
+        await send_mail(to=request.email, subject="Reset Your Password", html=html)
+    except Exception:
+        # same response either way, otherwise this endpoint reveals which emails have accounts
+        log.exception("Failed to send password reset email")
+
+    return {"message": _RESET_MESSAGE}
+
+
+@router.post("/reset_password")
+def reset_password(data: ResetPassword, session: SessionDep):
+    invalid = HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset token.")
 
     try:
-        await send_mail(
-            to=request.email,
-            subject=subject,
-            html=html_content
+        claims = jwt.decode(
+            data.token, SECRET_KEY, algorithms=[ALGORITHM],
+            options={"require_exp": True, "require_sub": True},
         )
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send reset email. Please try again later."
-        )
-    
-    return {
-        "message": "If an account exists with this email, a password reset link has been sent."
-    }
+        admin_id = int(claims["sub"])
+    except (JWTError, KeyError, TypeError, ValueError):
+        raise invalid
+    if claims.get("typ") != "reset":
+        raise invalid
 
-class ResetPassword(BaseModel):
-    email: str
-    token: str
-    new_password: str
-    
-@router.post('/reset_password' )
-async def reset_password(data: ResetPassword):
-    with Session(engine) as session:
-        admin = session.exec(
-            select(Admin).where(Admin.email == data.email)
-        ).first()
-    if not admin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with this email address."
+    admin = session.get(Admin, admin_id)
+    if (
+        not admin
+        or admin.email != data.email
+        or not secrets.compare_digest(
+            str(claims.get("pwf", "")).encode(), _password_fingerprint(admin.password).encode()
         )
-    stored_token = admin.reset_password_token
-    token_expiry = admin.reset_password_expiry
-    
-    if not stored_token or stored_token != data.token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset token."
-        )
-    
-    # Check if token has expired
-    if token_expiry and token_expiry < datetime.utcnow():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Reset token has expired. Please request a new password reset link."
-        )
-        
-    hashed_password = hash_password(data.new_password)
-    
-    # Store the hashed password in the admin and clear reset token fields
-    admin.password = hashed_password
-    admin.reset_password_token = None
+    ):
+        raise invalid
+
+    token = create_access_token(user_id=admin.id, account_type=ADMIN, role=ADMIN)
+    admin.password = hash_password(data.new_password)
+    admin.reset_password_token = None   # legacy columns, no longer used
     admin.reset_password_expiry = None
-    admin.updated_at = datetime.utcnow()
-    
+    admin.jwt_token = token             # signs out every other session
+    admin.updated_at = datetime.now(timezone.utc)
     session.add(admin)
     session.commit()
-    
-    # Generate and store new access token using create_jwt_token(email, role)
-    admin_role = admin.role
-    access_token = create_jwt_token(data.email, admin_role)
-        
-    return {
-        "message": "Password reset successful",
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
 
-    
-def hash_password(password: str) -> str:
-    # Fix: Handle bcrypt's 72-byte limit
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
-    return pwd_context.hash(password_bytes)
+    return {"message": "Password reset successful", "access_token": token, "token_type": "bearer"}
 
-# verify admin password
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
 
-# check authenticity
-def create_jwt_token(email: str, role: str, admin_id: Optional[int] = None) -> str:
-    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    to_encode = {"sub": email, "exp": expire, "role": role}
-    
-    # Embed admin_id if provided
-    if admin_id is not None:
-        to_encode["admin_id"] = admin_id
-    
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+# --- email OTP -----------------------------------------------------------------
+OTP_TTL_SECONDS = 600
+MAX_ATTEMPTS = 5
 
-def isAuthorized(token: str) -> Optional[Dict[str, Any]]:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email = payload.get("sub")
-        role = payload.get("role")
-        
-        if not email or not role:
-            return None
-        
-        staff_roles = ["receptionist", "supervisor", "manager", "sales_attendant"]
-        
-        with Session(engine) as session:
-            # Check if user is admin
-            if role == "admin":
-                user = session.exec(select(Admin).where(Admin.email == email)).first()
-                if not user:
-                    return None
-                if user.jwt_token != token:
-                    return None
-                # Admin is always authorized
-                return {
-                    "email": user.email,
-                    "admin_id": user.id,
-                    "role": user.role,
-                    "status": True
-                }
-            
-            # Check if user is staff with valid role
-            elif role in staff_roles:
-                user = session.exec(select(Staff).where(Staff.email == email)).first()
-                if not user:
-                    return None
-                if user.jwt_token != token:
-                    return None
-                # Verify the role matches what's in the database
-                if user.role != role:
-                    return None
-                return {
-                    "email": user.email,
-                    "staff_id": user.id,
-                    "admin_id": user.admin_id,
-                    "role": user.role,  
-                    "status": True
-                }
-            
-            else:
-                print(f"Invalid role: {role}")
-                return None
-                
-    except ExpiredSignatureError:
-        print("Token has expired")
-        return None
-    except JWTError:
-        print("Invalid token")
-        return None
-    except Exception as e:
-        print(f"Authorization error: {str(e)}")
-        return None
+
 class OTPVerification(BaseModel):
     email: EmailStr
-    otp: str    
+    otp: str
 
-# Email configuration (set these as environment variables in production)
+
 class EmailRequest(BaseModel):
     to: EmailStr
 
+
 def generate_otp() -> str:
-    """Generate a 6-digit OTP"""
-    return str(random.randint(100000, 999999))
+    """6-digit one-time code."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
 
 @router.post("/send-verification-email")
 async def send_verification_email(email_request: EmailRequest):
+    key = f"otp:{email_request.to}"
+    otp_code = generate_otp()
     try:
-        otp_code = generate_otp()
-        await redis_client.delete(f"otp:{email_request.to}") #delete the data attached to the prev key
-        key = f"otp:{email_request.to}"
-
-        data = {
-            "email": email_request.to,
-            "otp_code": otp_code,
-            "attempts": 0
-        }
-
         await redis_client.set(
             key,
-            json.dumps(data),
-            ex=600  # 10 minutes
+            json.dumps({"email": email_request.to, "otp_code": otp_code, "attempts": 0}),
+            ex=OTP_TTL_SECONDS,  # replaces any earlier code for this email
         )
-        # Create email content
-        subject = "Your Verification Code"
-        message =  f"""
+        html = f"""
         <html>
             <body>
                 <h2>Email Verification</h2>
@@ -393,71 +526,44 @@ async def send_verification_email(email_request: EmailRequest):
                 <p>This code will expire in 10 minutes.</p>
                 <p>If you didn't request this code, please ignore this email.</p>
                 <br>
-                <p>Best regards,<br>Your App Team</p>
+                <p>Best regards,<br>Harness</p>
             </body>
         </html>
         """
-        
-        # Send email
-        email_sent = await send_mail(
-            to= email_request.to,
-            subject=subject,
-            html=message,
-            )
-        
-        return {
-                    "message": "Verification code sent successfully",
-                    "email": email_request.to,
-                    "expires_in": "10 minutes",
-                    "status": email_sent
-         }
-   
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error sending verification email: {str(e)}")
-     
-MAX_ATTEMPTS = 5
- 
+        email_sent = await send_mail(to=email_request.to, subject="Your Verification Code", html=html)
+    except Exception:
+        log.exception("Failed to send verification email")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Could not send verification email")
+
+    return {
+        "message": "Verification code sent successfully",
+        "email": email_request.to,
+        "expires_in": "10 minutes",
+        "status": email_sent,
+    }
+
+
 @router.post("/verify-otp")
 async def verify_otp(verification: OTPVerification):
-    email = verification.email
-    user_otp = verification.otp
+    key = f"otp:{verification.email}"
+    stored = await redis_client.get(key)
+    if not stored:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "OTP expired or not found")
 
-    key = f"otp:{email}"
+    otp_data = json.loads(stored)
 
-    stored_data = await redis_client.get(key)
-
-    # Check if OTP exists
-    if not stored_data:
-        raise HTTPException(status_code=404, detail="OTP expired or not found")
-
-    otp_data = json.loads(stored_data)
-
-    # Check attempt limit
     if otp_data["attempts"] >= MAX_ATTEMPTS:
         await redis_client.delete(key)
-        raise HTTPException(status_code=400, detail="Too many failed attempts")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Too many failed attempts")
 
-    # Check OTP
-    if user_otp == otp_data["otp_code"]:
+    if secrets.compare_digest(verification.otp.encode(), otp_data["otp_code"].encode()):
         await redis_client.delete(key)
-        return {
-            "message": "OTP verified successfully",
-            "email": email,
-            "verified": True
-        }
+        return {"message": "OTP verified successfully", "email": verification.email, "verified": True}
 
-    # Wrong OTP → increment attempts
     otp_data["attempts"] += 1
-    remaining_attempts = MAX_ATTEMPTS - otp_data["attempts"]
-
-    await redis_client.set(
-        key,
-        json.dumps(otp_data),
-        ex=600  # keep expiration
-    )
-
+    await redis_client.set(key, json.dumps(otp_data), ex=OTP_TTL_SECONDS)
     raise HTTPException(
-        status_code=400,
-        detail=f"Invalid OTP. {remaining_attempts} attempts remaining"
+        status.HTTP_400_BAD_REQUEST,
+        f"Invalid OTP. {MAX_ATTEMPTS - otp_data['attempts']} attempts remaining",
     )
+

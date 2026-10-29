@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, status, Header, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from app.database import SessionDep
 from app.crud import get_admin_data, get_data_by_period
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, require_admin
 from sqlmodel import select, func
 from app.model import Product, Room, Sales, Booking  # Import your models
 
@@ -14,18 +14,8 @@ async def get_dashboard_data(
         session: SessionDep,
         date: Optional[str] = None,
         period: Optional[str] = None,
-        # authorization: str = Header(...)
+        auth: AuthUser = Depends(require_admin),
 ):
-    auth = {
-        "admin_id": 1
-    }
-    # token = authorization.split(" ")[1]
-    # auth = isAuthorized(token)
-    # if not auth:
-    #     raise HTTPException(status_code=401, detail="Not authorized")
-    # if auth.get("role") != "admin":
-    #     raise HTTPException(status_code=403, detail="Not authorized - Admin access required")
-    
     try:
         # Get all data (no date filter for totals)
         room_data = get_admin_data(auth["admin_id"], 'room', session)

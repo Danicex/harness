@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { TrendingUp, TrendingDown } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { currency } from "@/lib/currency"
 
 export const MetricCard = ({ label, value, change, isPositive, icon }) => {
   return (
@@ -86,7 +87,7 @@ export const SalesChart = ({ data }) => {
             axisLine={false}
             tickLine={false}
             tick={{ fill: "#94a3b8", fontSize: 12 }}
-            tickFormatter={(value) => `$${value}`}
+            tickFormatter={(value) => `NGN${value}`}
           />
 
           <Tooltip
@@ -95,7 +96,7 @@ export const SalesChart = ({ data }) => {
               border: "none",
               boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
             }}
-            formatter={(value) => [`$${value}`, "Revenue"]}
+            formatter={(value) => [`NGN${value}`, "Revenue"]}
           />
 
           <Area
@@ -162,7 +163,7 @@ export const SalesTable = ({ sales }) => {
                   })}
                 </TableCell>
 
-                <TableCell className="text-right font-bold">${sale.amount.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-bold">{currency} {sale.amount.toFixed(2)}</TableCell>
 
                 <TableCell className="capitalize text-muted-foreground">{sale.paymentMethod}</TableCell>
 

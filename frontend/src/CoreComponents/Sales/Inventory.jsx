@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import React, { useEffect, useMemo, useState } from 'react'
 import { CreateInventory, UpdateInventory } from '@/CRUD/Inventory';
 import DataPagination from '@/components/DataPagination';
+import { currency } from '@/lib/currency';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -149,7 +150,7 @@ export default function Inventory() {
               {pageItems.map((inventory) => (
                 <TableRow key={inventory.id}>
                   <TableCell className="font-medium">{inventory.name}</TableCell>
-                  <TableCell>${inventory.price || "0.00"}</TableCell>
+                  <TableCell>{currency} {inventory.price || "0.00"}</TableCell>
                   <TableCell>
                     <img src={inventory.image_url} alt={inventory.name} className='w-20'/>
                   </TableCell>

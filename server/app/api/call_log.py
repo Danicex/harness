@@ -1,11 +1,11 @@
 # CRUD call_log
-from fastapi import APIRouter, HTTPException, status, Header, Form
+from fastapi import APIRouter, HTTPException, status, Form, Depends
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import SessionDep
 from app.model import CallLog
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, require_admin
 
 router = APIRouter(prefix="/call_log", tags=["call_logs"])
 
@@ -16,14 +16,8 @@ def create_call_log(
     duration: str = Form(...),
     sentiment: str = Form(...),
     status: str = Form(default="active"),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         call_log_dict = {
@@ -32,7 +26,7 @@ def create_call_log(
             "duration": duration,
             "sentiment": sentiment,
             "status": status,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
 
         success, call_log = create_data("call_log", call_log_dict, session)
@@ -56,14 +50,8 @@ def create_call_log(
 @router.get("/get_call_logs")
 def read_call_logs(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         call_logs = get_admin_data(auth["admin_id"], "call_log", session)
@@ -85,14 +73,8 @@ def read_call_logs(
 def get_single_call_log(
     session: SessionDep,
     call_log_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         call_log = get_single_data(call_log_id, "call_log", session)
@@ -121,14 +103,8 @@ def update_call_log(
     duration: Optional[str] = Form(None),
     sentiment: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Get existing call log
@@ -182,14 +158,8 @@ def update_call_log(
 def delete_call_log(
     session: SessionDep,
     call_log_id: int,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
 
     try:
         # Get existing call log

@@ -1,11 +1,11 @@
 # CRUD hotel_profile
-from fastapi import APIRouter, HTTPException, status, Header, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form, Depends
 from typing import Optional
 from datetime import datetime
 from app.database import SessionDep
 from app.model import HotelProfile
 from app.crud import create_data, update_data, delete_data, get_admin_data, get_admin_data_single, get_single_data
-from app.auth.authentication import isAuthorized
+from app.auth.authentication import AuthUser, get_current_user, require_admin
 from app.services.upload import handle_file_upload
 
 router = APIRouter(prefix="/hotel_profile", tags=["hotel profile"])
@@ -23,14 +23,8 @@ async def create_hotel_profile(
     agent_phone: Optional[str] = Form(None),
     social_links: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         # Handle image upload
@@ -73,22 +67,35 @@ async def create_hotel_profile(
 @router.get("/get_hotel_profile")
 def read_hotel_profile(
     session: SessionDep,
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(get_current_user)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    
     try:
+        hotel_credentials = get_admin_data_single(auth["admin_id"], "admin_credentials", session)
         hotel_profiles = get_admin_data_single(auth["admin_id"], "hotel_profile", session)
-        
+
         if not hotel_profiles:
             return {"message": "No hotel profile found", "hotel_profile": None}
-        
-        # hotel_profile is a one-to-one relationship, return the first (and only) result
+
         profile = hotel_profiles[0] if isinstance(hotel_profiles, list) else hotel_profiles
-        return profile
+
+        # Extract subscription fields from credentials
+        credentials = None
+        if hotel_credentials:
+            credentials = hotel_credentials[0] if isinstance(hotel_credentials, list) else hotel_credentials
+
+        # Build response dict from the SQLModel object
+        response = profile.model_dump() if hasattr(profile, "model_dump") else dict(profile)
+
+        response["subscription_status"] = credentials.subscription_status if credentials else None
+        response["subscription_plan_type"] = credentials.subscription_plan_type if credentials else None
+        response["subscription_expires_at"] = (
+            credentials.subscription_expires_at.isoformat()
+            if credentials and credentials.subscription_expires_at
+            else None
+        )
+        response["subscription_manage_link"] = credentials.subscription_manage_link if credentials else None
+
+        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -110,14 +117,8 @@ async def update_hotel_profile(
     website_url: Optional[str] = Form(None),
     agent_phone: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
-    authorization: str = Header(...)
+    auth: AuthUser = Depends(require_admin)
 ):
-    token = authorization.split(" ")[1]
-    auth = isAuthorized(token)
-    if not auth:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    if auth.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Not authorized")
     
     try:
         existing_profile = get_admin_data_single(auth["admin_id"], "hotel_profile", session)
@@ -179,14 +180,7 @@ async def update_hotel_profile(
 # def delete_hotel_profile(
 #     session: SessionDep,
 #     hotel_profile_id: int,
-#     authorization: str = Header(...)
 # ):
-#     token = authorization.split(" ")[1]
-#     auth = isAuthorized(token)
-#     if not auth:
-#         raise HTTPException(status_code=401, detail="Not authorized")
-#     if auth.get("role") != "admin":
-#         raise HTTPException(status_code=401, detail="Not authorized")
     
 #     try:
 #         existing_profile = get_single_data(hotel_profile_id, "hotel_profile", session)

@@ -108,11 +108,6 @@ export default function Receipt({ sale = null, booking = null }) {
               </tr>
 
               <tr>
-                <td><strong>Room Type</strong></td>
-                <td>{booking.room_type}</td>
-              </tr>
-
-              <tr>
                 <td><strong>Check In</strong></td>
                 <td>{booking.check_in}</td>
               </tr>

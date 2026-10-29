@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useMyContext } from '@/Context/AppContext';
 import api from '@/lib/api';
-import { RefreshCcw, TrendingUp, TrendingDown, DollarSign, ShoppingBag, Calendar, Percent, CalendarRange } from 'lucide-react';
+import { currency } from '@/lib/currency';
+import { RefreshCcw, TrendingUp, TrendingDown, ShoppingBag, Calendar, Percent, CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -355,7 +356,7 @@ const formattedDate = `${year}-${month}-${day}`;
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <MetricCard
             label="Total Revenue"
-            value={`$${dashboardData.performance.revenue_comparison.total_revenue.toFixed(2)}`}
+            value={`${currency} ${dashboardData.performance.revenue_comparison.total_revenue.toFixed(2)}`}
             icon="💰"
           />
           <MetricCard
@@ -428,7 +429,7 @@ const OverviewTab = ({ data, salesTrend, bookingTrend }) => {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={(entry) => `${entry.name}: $${entry.revenue.toFixed(2)}`}
+                label={(entry) => `${entry.name}: ${currency} ${entry.revenue.toFixed(2)}`}
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="revenue"
@@ -448,8 +449,8 @@ const OverviewTab = ({ data, salesTrend, bookingTrend }) => {
             <AreaChart data={[...salesTrend, ...bookingTrend]}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis tickFormatter={(value) => `$${value}`} />
-              <Tooltip formatter={(value) => `$${value}`} />
+              <YAxis width={90} tickFormatter={(value) => `${currency} ${value}`} />
+              <Tooltip formatter={(value) => `${currency} ${value}`} />
               <Legend />
               <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} name="Revenue" />
             </AreaChart>
@@ -466,7 +467,7 @@ const OverviewTab = ({ data, salesTrend, bookingTrend }) => {
               {data.performance.top_selling_products.slice(0, 5).map((product, idx) => (
                 <div key={idx} className="flex justify-between items-center text-sm">
                   <span>{product.name}</span>
-                  <span className="font-semibold">${product.total_revenue.toFixed(2)}</span>
+                  <span className="font-semibold">{currency} {product.total_revenue.toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -526,7 +527,7 @@ const ProductsTab = ({ data }) => {
                 <TableRow key={product.id}>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{product.category || 'N/A'}</TableCell>
-                  <TableCell className="text-right">${parseFloat(product.price).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{currency} {parseFloat(product.price).toFixed(2)}</TableCell>
                   <TableCell className="text-right">{product.quantity}</TableCell>
                   <TableCell>{new Date(product.created_at).toLocaleDateString()}</TableCell>
                 </TableRow>
@@ -580,7 +581,7 @@ const RoomsTab = ({ data, roomStatusData }) => {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Room Revenue</p>
-              <p className="text-3xl font-bold">${data.rooms.total_room_revenue.toFixed(2)}</p>
+              <p className="text-3xl font-bold">{currency} {data.rooms.total_room_revenue.toFixed(2)}</p>
             </div>
           </div>
         </Card>
@@ -603,7 +604,7 @@ const RoomsTab = ({ data, roomStatusData }) => {
               {data.rooms.all_rooms.map((room) => (
                 <TableRow key={room.id}>
                   <TableCell className="font-medium">{room.number}</TableCell>
-                  <TableCell className="text-right">${parseFloat(room.price).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{currency} {parseFloat(room.price).toFixed(2)}</TableCell>
                   <TableCell>
                     <Badge
                       className={
@@ -636,8 +637,8 @@ const SalesTab = ({ data, salesTrend, paymentMethodData }) => {
             <AreaChart data={salesTrend}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis tickFormatter={(value) => `$${value}`} />
-              <Tooltip formatter={(value) => `$${value}`} />
+              <YAxis width={90} tickFormatter={(value) => `${currency} ${value}`} />
+              <Tooltip formatter={(value) => `${currency} ${value}`} />
               <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} name="Revenue" />
               <Area type="monotone" dataKey="items" stroke="#10b981" fill="#10b981" fillOpacity={0.1} name="Items Sold" />
             </AreaChart>
@@ -688,7 +689,7 @@ const SalesTab = ({ data, salesTrend, paymentMethodData }) => {
                 <TableRow key={sale.id}>
                   <TableCell className="font-medium">{sale.product_name}</TableCell>
                   <TableCell className="text-right">{sale.quantity}</TableCell>
-                  <TableCell className="text-right">${parseFloat(sale.price).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{currency} {parseFloat(sale.price).toFixed(2)}</TableCell>
                   <TableCell className="capitalize">{sale.payment_method}</TableCell>
                   <TableCell>{new Date(sale.created_at).toLocaleString()}</TableCell>
                 </TableRow>
@@ -712,7 +713,7 @@ const BookingsTab = ({ data, bookingTrend, bookingStatusData, roomStatusData }) 
             <AreaChart data={bookingTrend}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis yAxisId="left" tickFormatter={(value) => `$${value}`} />
+              <YAxis yAxisId="left" tickFormatter={(value) => `NGN${value}`} />
               <YAxis yAxisId="right" orientation="right" />
               <Tooltip />
               <Legend />
@@ -769,7 +770,7 @@ const BookingsTab = ({ data, bookingTrend, bookingStatusData, roomStatusData }) 
                   <TableCell>Room #{booking.room_id}</TableCell>
                   <TableCell>{booking.check_in}</TableCell>
                   <TableCell>{booking.check_out}</TableCell>
-                  <TableCell className="text-right">${parseFloat(booking.price).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{currency} {parseFloat(booking.price).toFixed(2)}</TableCell>
                   <TableCell>
                     <Badge
                       className={

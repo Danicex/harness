@@ -1,21 +1,23 @@
 #!/bin/bash
-# echo "opening project in vs code"
-# code .
-# # Start frontend app (react app)
-# echo "Starting frontend..."
-# cd ./frontend
-# npm run dev &
-# echo "opening frontend project on browser"
-# google-chrome http://localhost:5173/
-# # Navigate back to root and start backend app (fastapi app)
-# echo "Starting backend..."
-cd ./server
-source ./myenv/bin/activate
-fastapi dev ./app/main.py
-cd ../backend
-fastapi dev app/main.py --port 8001
 
-# echo "opening backend project on browser"
-# google-chrome http://localhost:8000/docs
+# Exit immediately if any command fails
+set -e
+
+# Store the root directory path
+ROOT_DIR=$(pwd)
+
+echo "Starting frontend..."
+cd "$ROOT_DIR/frontend"
+# Run in background and redirect output if you want a cleaner terminal
+npm run dev & 
+
+echo "Opening frontend project on browser..."
+# Optional: add your browser opening command here if needed (e.g., 'open http://localhost:5173' or 'xdg-open')
+
+echo "Starting backend..."
+cd "$ROOT_DIR/server"
+source ./myenv/bin/activate
+fastapi dev ./app/main.py &
+
 # Wait for all background processes to finish
 wait

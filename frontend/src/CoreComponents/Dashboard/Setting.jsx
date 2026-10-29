@@ -3,89 +3,112 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Mail, Phone, MapPin, Globe, Hotel, Edit3, LogOut } from "lucide-react"
+import {
+  Mail,
+  Phone,
+  MapPin,
+  Globe,
+  Hotel,
+  Edit3,
+  LogOut,
+  CreditCard,
+  CalendarDays,
+  ExternalLink,
+} from "lucide-react"
 import { useMyContext } from "@/Context/AppContext"
 import { useNavigate } from "react-router-dom"
 import api from "@/lib/api"
 import EditProfile from "@/CRUD/EditProfile"
-import ThemeToggle from "@/components/ThemeToggle"
+
+// Helper: format ISO date string
+const formatDate = (value) => {
+  if (!value) return "—"
+  try {
+    return new Date(value).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  } catch {
+    return value
+  }
+}
+
+// Helper: map subscription status to badge style
+const getStatusVariant = (status) => {
+  switch ((status || "").toLowerCase()) {
+    case "active":
+      return "default"
+    case "non-renewing":
+      return "secondary"
+    case "attention":
+      return "destructive"
+    case "cancelled":
+      return "destructive"
+    case "completed":
+      return "outline"
+    default:
+      return "outline"
+  }
+}
 
 export default function HotelProfileView() {
-  const [profile, setProfile] = useState(null) // Changed from array to single object
+  const [profile, setProfile] = useState(null)
   const navigate = useNavigate()
   const [error, setError] = useState(false)
   const [onEdit, setOnEdit] = useState(false)
   const [reload, setReload] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false)
   const { logout } = useMyContext()
 
   useEffect(() => {
     fetchData()
   }, [reload])
 
-
   const fetchData = () => {
     setLoading(true)
     setError(false)
     api.get(`/hotel_profile/get_hotel_profile`)
       .then((res) => {
-        // Handle both array and object responses
-        const responseData = res.data;
+        const responseData = res.data
         if (Array.isArray(responseData) && responseData.length > 0) {
-          setProfile(responseData[0]); // Take first if array
-        } else if (responseData && typeof responseData === 'object') {
-          setProfile(responseData); // Direct object
+          setProfile(responseData[0])
+        } else if (responseData && typeof responseData === "object") {
+          setProfile(responseData)
         } else {
-          setProfile(null);
+          setProfile(null)
         }
-        console.log("Profile data:", responseData);
+        console.log("Profile data:", responseData)
         setLoading(false)
       })
       .catch((err) => {
-        console.error("Error fetching profile:", err);
-        setTimeout(() => {
-          setError(true)
-        }, 3000)
+        console.error("Error fetching profile:", err)
+        setTimeout(() => setError(true), 3000)
         setLoading(false)
       })
   }
 
   const handleLogout = () => {
     logout()
-    navigate('/')
+    navigate("/")
   }
 
-
-
-  // Helper to safely parse social links
   const getSocialLinks = (profileData) => {
     if (!profileData?.social_links) return []
-    
-    // If it's a string, try to parse it
-    if (typeof profileData.social_links === 'string') {
+    if (typeof profileData.social_links === "string") {
       try {
-        const parsed = JSON.parse(profileData.social_links);
-        return Object.entries(parsed).map(([platform, url]) => ({
-          platform,
-          url
-        }));
-      } catch (e) {
-        return [];
+        const parsed = JSON.parse(profileData.social_links)
+        return Object.entries(parsed).map(([platform, url]) => ({ platform, url }))
+      } catch {
+        return []
       }
     }
-    
-    // If it's an object
-    if (typeof profileData.social_links === 'object') {
-      return Object.entries(profileData.social_links).map(([platform, url]) => ({
-        platform,
-        url
-      }));
+    if (typeof profileData.social_links === "object") {
+      return Object.entries(profileData.social_links).map(([platform, url]) => ({ platform, url }))
     }
-    
     return []
   }
 
@@ -95,9 +118,8 @@ export default function HotelProfileView() {
         <Button onClick={handleLogout} variant="outline" className="text-red-400">
           <LogOut className="mr-2 h-4 w-4" /> Logout
         </Button>
-        
       </div>
-      
+
       {error && (
         <Card className="border-red-200">
           <CardHeader>
@@ -124,10 +146,15 @@ export default function HotelProfileView() {
         </Button>
       </div>
 
-      <div className="relative w-full bg-black"> 
+      <div className="relative w-full bg-black">
         {onEdit && (
           <div className="absolute left-0 right-0 m-auto z-20 max-w-xl">
-            <EditProfile formData={profile} setOnEdit={setOnEdit} onUpdate={fetchData} setReload={setReload}/>
+            <EditProfile
+              formData={profile}
+              setOnEdit={setOnEdit}
+              onUpdate={fetchData}
+              setReload={setReload}
+            />
           </div>
         )}
       </div>
@@ -142,9 +169,11 @@ export default function HotelProfileView() {
           <Card className="md:col-span-1">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center space-y-4">
-                  <img src={profile?.image_url} alt={profile.hotel_name} className="rounded-full w-[100px] "/>
-               
-
+                <img
+                  src={profile?.image_url}
+                  alt={profile.hotel_name}
+                  className="rounded-full w-[100px]"
+                />
                 <div className="text-center">
                   <h2 className="text-2xl font-bold">{profile?.hotel_name || "Hotel Name"}</h2>
                   <p className="text-muted-foreground">{profile?.name || "Manager"}</p>
@@ -195,7 +224,9 @@ export default function HotelProfileView() {
                     <div>
                       <p className="text-sm font-medium">Agent Phone</p>
                       <p className="text-sm text-muted-foreground">
-                        {profile?.agent_phone && profile.agent_phone !== "null" ? profile.agent_phone : "Not set"}
+                        {profile?.agent_phone && profile.agent_phone !== "null"
+                          ? profile.agent_phone
+                          : "Not set"}
                       </p>
                     </div>
                   </div>
@@ -203,8 +234,12 @@ export default function HotelProfileView() {
                     <Globe className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm font-medium">Website</p>
-                      <a href={profile?.website_url} target="_blank" rel="noopener noreferrer" 
-                         className="text-sm text-primary hover:underline">
+                      <a
+                        href={profile?.website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
                         {profile?.website_url || "Not set"}
                       </a>
                     </div>
@@ -218,16 +253,19 @@ export default function HotelProfileView() {
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold">Hotel Description</h3>
                 <div className="space-y-2">
-                  <p className={`text-sm text-muted-foreground leading-relaxed ${!isExpanded ? 'line-clamp-3' : ''}`}>
+                  <p
+                    className={`text-sm text-muted-foreground leading-relaxed ${
+                      !isExpanded ? "line-clamp-3" : ""
+                    }`}
+                  >
                     {profile?.description || "No description provided"}
                   </p>
-                  
                   {profile?.description && profile.description.length > 200 && (
                     <button
                       onClick={() => setIsExpanded(!isExpanded)}
                       className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                     >
-                      {isExpanded ? 'Show Less' : 'Read More'}
+                      {isExpanded ? "Show Less" : "Read More"}
                     </button>
                   )}
                 </div>
@@ -241,7 +279,10 @@ export default function HotelProfileView() {
                     <div className="flex flex-wrap gap-2">
                       {getSocialLinks(profile).map((social, index) => (
                         <a key={index} href={social.url} target="_blank" rel="noopener noreferrer">
-                          <Badge variant="outline" className="cursor-pointer hover:bg-primary hover:text-white">
+                          <Badge
+                            variant="outline"
+                            className="cursor-pointer hover:bg-primary hover:text-white"
+                          >
                             {social.platform}
                           </Badge>
                         </a>
@@ -250,15 +291,68 @@ export default function HotelProfileView() {
                   </div>
                 </>
               )}
+
+              {/* Subscription Section */}
+              <Separator />
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  Subscription
+                </h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="flex items-center space-x-3">
+                    <CreditCard className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Status</p>
+                      <Badge variant={getStatusVariant(profile?.subscription_status)}>
+                        {profile?.subscription_status || "Not set"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Plan Type</p>
+                      <p className="text-sm text-muted-foreground capitalize">
+                        {profile?.subscription_plan_type || "Not set"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Expires On</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(profile?.subscription_expires_at)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <ExternalLink className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Manage Subscription</p>
+                      {profile?.subscription_manage_link ? (
+                        <a
+                          href={profile.subscription_manage_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline"
+                        >
+                          Open Paystack Portal
+                        </a>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Not available</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <div className="text-center text-muted-foreground">
-              No profile data available
-            </div>
+            <div className="text-center text-muted-foreground">No profile data available</div>
           </CardContent>
         </Card>
       )}

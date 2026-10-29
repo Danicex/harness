@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Plus, Minus, Trash2, Receipt, GripVertical, Search, X } from "lucide-react";
 import { motion } from "framer-motion";
 import api from "@/lib/api";
+import { currency } from "@/lib/currency";
 
 /**
  * Premium POS — single page checkout screen with draggable ticket.
@@ -17,7 +18,7 @@ const PAYMENT_METHODS = [
 ];
 
 const money = (n) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+  new Intl.NumberFormat("en-NG", { style: "currency", currency, currencyDisplay: "code" }).format(n);
 
 
 export default function CreateSale() {

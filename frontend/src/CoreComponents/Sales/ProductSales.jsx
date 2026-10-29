@@ -408,7 +408,7 @@ const RenderSales = () => {
                               total: sale.total_amount,
                               items: sale.products_data.map(item => ({
                                 id: item.id,
-                                name: item.name,
+                                name: item.product_name,
                                 quantity: item.quantity,
                                 price: item.price
                               }))

@@ -88,6 +88,7 @@ import { useMyContext } from '@/Context/AppContext';
 import { printReceipt } from '@/CoreComponents/PrintReceipt';
 import Receipt from '@/CoreComponents/ReceiptTemplate';
 import api from '@/lib/api';
+import { currency } from '@/lib/currency';
 
 const CreateSale = () => {
   const { toast } = useToast();
@@ -237,7 +238,7 @@ const {user_role} = useMyContext()
       )}
       <div>
         <p className="text-2xl font-bold text-primary">
-          N{parseFloat(product.price).toFixed(2)}
+          {currency} {parseFloat(product.price).toFixed(2)}
         </p>
         <p className="text-sm text-muted-foreground mt-1">
           Quantity Available: {product.quantity}
@@ -281,7 +282,7 @@ const {user_role} = useMyContext()
               <div className="bg-muted p-4 rounded-lg">
                 <h3 className="font-semibold">{selectedProduct.name}</h3>
                 <p className="text-sm text-muted-foreground">
-                  Price: ${parseFloat(selectedProduct.price).toFixed(2)}
+                  Price: {currency} {parseFloat(selectedProduct.price).toFixed(2)}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Available: {selectedProduct.quantity}
@@ -345,7 +346,7 @@ const {user_role} = useMyContext()
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Total Amount:</span>
                   <span className="text-xl font-bold text-primary">
-                    ${(parseFloat(selectedProduct.price) * formData.quantity).toFixed(2)}
+                    {currency} {(parseFloat(selectedProduct.price) * formData.quantity).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -544,7 +545,7 @@ const RenderSales = () => {
           <CardHeader>
             <h1 className='text-xl bold'>Summary</h1>
   <p>Total Transactions: {saleSummary.total_transactions}</p>
-      <p>Total Amount: <span className='text-green-500'>${saleSummary.total_amount.toFixed(2)}</span> </p>
+      <p>Total Amount: <span className='text-green-500'>{currency} {saleSummary.total_amount.toFixed(2)}</span> </p>
           </CardHeader>
 </Card>
 )} 
