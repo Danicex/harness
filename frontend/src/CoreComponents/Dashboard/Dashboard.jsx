@@ -36,7 +36,7 @@ import api from "@/lib/api";
 const RenderAnalytics = lazy(() => import("../Analytics/RenderAnalytics"))
 const Room = lazy(() => import("../Bookings/Room"))
 const Inventory = lazy(() => import("../Sales/Inventory"))
-const AutomatedCalls = lazy(() => import("../Marketing/AutomatedCalls"))
+// const AutomatedCalls = lazy(() => import("../Marketing/AutomatedCalls"))
 const CampaignsPage = lazy(() => import("../Marketing/Champagne"))
 const CustomerList = lazy(() => import("../Customers/CustomerList"))
 const CampaignHistory = lazy(() => import("../Marketing/CampaignHistory"))
@@ -224,7 +224,7 @@ export default function Dashboard() {
     blog: Blog,
     profile: ProfilePage,
     staff_app: AllWrapper,
-    automated_calls: AutomatedCalls,
+    // automated_calls: AutomatedCalls,
     settings: Setting,
     attendance: AttendanceDisplay,
     task: TaskManagement,

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { CreateDatasetForm } from '../Chatbot/Dataset';
+// import { CreateDatasetForm } from '../Chatbot/Dataset';
 import {
   Table,
   TableBody,
@@ -130,7 +130,7 @@ const get_data = async () => {
       {/* Dataset Modal/Component */}
       {addDataSet && (
         <Card className="border-2 border-primary/20 ">
-         <CreateDatasetForm/>
+         {/* <CreateDatasetForm/> */}
         </Card>
       )}
 
